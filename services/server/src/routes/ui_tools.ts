@@ -36,6 +36,9 @@ export const ALLOWED_UI_TOOLS = [
   "ui_zone_create_polygon",
   // M2-T-05 board outline tool.
   "ui_outline_create_polygon",
+  // M2-T-07 net-class panel.
+  "ui_netclass_set",
+  "ui_netclass_delete",
 ] as const;
 export type AllowedUiTool = (typeof ALLOWED_UI_TOOLS)[number];
 

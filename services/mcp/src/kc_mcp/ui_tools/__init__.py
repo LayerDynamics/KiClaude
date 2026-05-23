@@ -16,6 +16,7 @@ from .footprint_move import ui_footprint_move
 from .footprint_xy import ui_footprint_place_xy
 from .junction_xy import ui_junction_place_xy
 from .label_xy import ui_label_place_xy
+from .netclass_edit import ui_netclass_delete, ui_netclass_set
 from .outline_polygon import ui_outline_create_polygon
 from .symbol_edit import ui_symbol_edit_props
 from .symbol_xy import ui_symbol_place_xy
@@ -39,6 +40,9 @@ UI_TOOLS = {
     "ui_zone_create_polygon": ui_zone_create_polygon,
     # M2-T-05 extension — board outline polygon.
     "ui_outline_create_polygon": ui_outline_create_polygon,
+    # M2-T-07 extension — net-class panel.
+    "ui_netclass_set": ui_netclass_set,
+    "ui_netclass_delete": ui_netclass_delete,
 }
 
 
@@ -48,6 +52,8 @@ __all__ = [
     "ui_footprint_place_xy",
     "ui_junction_place_xy",
     "ui_label_place_xy",
+    "ui_netclass_delete",
+    "ui_netclass_set",
     "ui_outline_create_polygon",
     "ui_symbol_edit_props",
     "ui_symbol_place_xy",

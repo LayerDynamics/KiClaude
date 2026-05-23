@@ -446,6 +446,86 @@ def test_ui_outline_create_polygon_rejects_thin_cutout() -> None:
     assert "cutouts_mm[0]" in result["error"]
 
 
+def test_ui_netclass_set_upserts_and_binds_nets() -> None:
+    from kc_mcp.ui_tools import ui_netclass_set
+
+    project: dict[str, Any] = {
+        "pcb": {
+            "net_classes": [],
+            "nets": [
+                {"name": "+3V3"},
+                {"name": "+5V"},
+                {"name": "GND"},
+            ],
+        }
+    }
+    result = ui_netclass_set(
+        project,
+        name="Power",
+        clearance_mm=0.3,
+        trace_width_mm=0.6,
+        bind_nets=["+3V3", "+5V"],
+    )
+    assert result["ok"] is True
+    assert result["net_class"]["name"] == "Power"
+    assert result["net_class"]["trace_width_mm"] == 0.6
+    assert set(result["bound_nets"]) == {"+3V3", "+5V"}
+    nets_by_name = {n["name"]: n for n in project["pcb"]["nets"]}
+    assert nets_by_name["+3V3"]["class"] == ["Power"]
+    assert nets_by_name["GND"].get("class") is None
+
+    # Idempotent update — same name → mutate the same entry.
+    again = ui_netclass_set(project, name="Power", clearance_mm=0.4)
+    assert again["ok"] is True
+    assert len(project["pcb"]["net_classes"]) == 1
+    assert project["pcb"]["net_classes"][0]["clearance_mm"] == 0.4
+
+
+def test_ui_netclass_set_requires_name() -> None:
+    from kc_mcp.ui_tools import ui_netclass_set
+
+    project: dict[str, Any] = {"pcb": {}}
+    result = ui_netclass_set(project, name="   ")
+    assert result["ok"] is False
+    assert "name" in result["error"]
+
+
+def test_ui_netclass_delete_unbinds_to_default() -> None:
+    from kc_mcp.ui_tools import ui_netclass_delete, ui_netclass_set
+
+    project: dict[str, Any] = {
+        "pcb": {
+            "net_classes": [],
+            "nets": [{"name": "+3V3"}, {"name": "+5V"}],
+        }
+    }
+    ui_netclass_set(project, name="Power", bind_nets=["+3V3", "+5V"])
+    result = ui_netclass_delete(project, name="Power")
+    assert result["ok"] is True
+    assert set(result["unbound_nets"]) == {"+3V3", "+5V"}
+    assert project["pcb"]["net_classes"] == []
+    for net in project["pcb"]["nets"]:
+        assert net["class"] == ["Default"]
+
+
+def test_ui_netclass_delete_refuses_default_class() -> None:
+    from kc_mcp.ui_tools import ui_netclass_delete
+
+    project: dict[str, Any] = {"pcb": {"net_classes": []}}
+    result = ui_netclass_delete(project, name="Default")
+    assert result["ok"] is False
+    assert "Default" in result["error"]
+
+
+def test_ui_netclass_delete_unknown_returns_error() -> None:
+    from kc_mcp.ui_tools import ui_netclass_delete
+
+    project: dict[str, Any] = {"pcb": {"net_classes": []}}
+    result = ui_netclass_delete(project, name="NonExistent")
+    assert result["ok"] is False
+    assert "NonExistent" in result["error"]
+
+
 # ---------------------------------------------------------------------
 # Read-only / proxy tools.
 # ---------------------------------------------------------------------
