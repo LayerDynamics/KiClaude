@@ -13,6 +13,7 @@
 
 pub mod drc;
 pub mod geom;
+pub mod impedance;
 pub mod index;
 pub mod routing;
 pub mod scene;
