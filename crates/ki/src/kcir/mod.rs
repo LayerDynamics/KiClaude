@@ -6,8 +6,10 @@
 //! Every transformation in kiclaude passes through KCIR. The `KiCad` file
 //! format remains the canonical persistent form; KCIR is the in-memory model.
 
+mod diffpair;
 mod fab;
 pub mod hierarchy;
+mod lengthgroup;
 pub mod migrations;
 mod nets;
 mod pcb;
@@ -15,7 +17,9 @@ mod project;
 mod schematic;
 mod stackup;
 
+pub use diffpair::DiffPair;
 pub use fab::{BomPolicy, DesignRules, FabTarget, FabTargetPreset};
+pub use lengthgroup::LengthGroup;
 pub use nets::{LayerRef, Net, NetClass, NetClassRef, NetRef, PadRef, Topology};
 pub use pcb::{
     check_invariants as check_pcb_invariants, Drawing, FootprintCourtyard, FootprintInstance,

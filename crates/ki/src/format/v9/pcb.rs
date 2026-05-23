@@ -250,8 +250,8 @@ fn map_footprints(root: &SNode, pcb: &mut Pcb, net_names: &HashMap<i32, String>)
                     .collect()
             })
             .unwrap_or_default();
-        let locked = find_child(form, "locked").is_some()
-            || attributes.iter().any(|a| a == "locked");
+        let locked =
+            find_child(form, "locked").is_some() || attributes.iter().any(|a| a == "locked");
 
         let pads = map_pads(form, net_names);
         let (drawings, courtyard) = map_footprint_drawings(form);
@@ -282,12 +282,23 @@ fn map_pads(footprint: &SNode, net_names: &HashMap<i32, String>) -> Vec<Pad> {
     let mut out = Vec::new();
     for form in find_children(footprint, "pad") {
         let body: Vec<&SNode> = body_children(form).collect();
-        let number = body.first().and_then(|n| atom_str(n)).unwrap_or("").to_string();
-        let pad_type = body.get(1).and_then(|n| atom_str(n)).unwrap_or("").to_string();
-        let shape = body.get(2).and_then(|n| atom_str(n)).unwrap_or("").to_string();
+        let number = body
+            .first()
+            .and_then(|n| atom_str(n))
+            .unwrap_or("")
+            .to_string();
+        let pad_type = body
+            .get(1)
+            .and_then(|n| atom_str(n))
+            .unwrap_or("")
+            .to_string();
+        let shape = body
+            .get(2)
+            .and_then(|n| atom_str(n))
+            .unwrap_or("")
+            .to_string();
         let (px, py, prot) = read_at(form);
-        let size = find_child(form, "size")
-            .map_or((0.0, 0.0), read_point);
+        let size = find_child(form, "size").map_or((0.0, 0.0), read_point);
         let drill = find_child(form, "drill").and_then(read_drill);
         let layers: Vec<LayerRef> = find_child(form, "layers")
             .map(|n| {
@@ -366,7 +377,14 @@ fn read_pad_net(pad: &SNode, net_names: &HashMap<i32, String>) -> String {
 /// `fp_poly` on `*.CrtYd` becomes the courtyard polygon; everything
 /// else becomes a [`Drawing`].
 fn map_footprint_drawings(form: &SNode) -> (Vec<Drawing>, Option<FootprintCourtyard>) {
-    let kinds = ["fp_line", "fp_arc", "fp_rect", "fp_circle", "fp_text", "fp_poly"];
+    let kinds = [
+        "fp_line",
+        "fp_arc",
+        "fp_rect",
+        "fp_circle",
+        "fp_text",
+        "fp_poly",
+    ];
     let mut drawings = Vec::new();
     let mut courtyard: Option<FootprintCourtyard> = None;
     let SNode::List { children, .. } = form else {
@@ -400,7 +418,9 @@ fn map_footprint_drawings(form: &SNode) -> (Vec<Drawing>, Option<FootprintCourty
             .to_string();
 
         if kind == "fp_poly" {
-            let points = find_child(d, "pts").map(collect_xy_points).unwrap_or_default();
+            let points = find_child(d, "pts")
+                .map(collect_xy_points)
+                .unwrap_or_default();
             if (layer == "F.CrtYd" || layer == "B.CrtYd") && courtyard.is_none() {
                 courtyard = Some(FootprintCourtyard {
                     layer: LayerRef(layer),
@@ -446,7 +466,11 @@ fn map_models(form: &SNode) -> Vec<Model3D> {
     let mut out = Vec::new();
     for m in find_children(form, "model") {
         let body: Vec<&SNode> = body_children(m).collect();
-        let path = body.first().and_then(|n| atom_str(n)).unwrap_or("").to_string();
+        let path = body
+            .first()
+            .and_then(|n| atom_str(n))
+            .unwrap_or("")
+            .to_string();
         let offset = find_child(m, "offset")
             .and_then(|o| find_child(o, "xyz"))
             .map_or((0.0, 0.0, 0.0), read_xyz);
@@ -941,10 +965,7 @@ mod tests {
         );
         let fp = &pcb.footprints[0];
         assert_eq!(fp.models_3d.len(), 1);
-        assert_eq!(
-            fp.models_3d[0].path,
-            "${KICAD9_3DMODEL_DIR}/R_0603.step"
-        );
+        assert_eq!(fp.models_3d[0].path, "${KICAD9_3DMODEL_DIR}/R_0603.step");
         assert_eq!(fp.models_3d[0].scale, (1.0, 1.0, 1.0));
     }
 

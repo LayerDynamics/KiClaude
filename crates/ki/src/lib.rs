@@ -26,7 +26,7 @@ pub mod python;
 ///
 /// Bump on every breaking change and add a migration under
 /// `kcir::migrations`. Additive changes also bump the minor version.
-pub const KCIR_VERSION: &str = "0.3.0";
+pub const KCIR_VERSION: &str = "0.4.0";
 
 /// Crate version, surfaced through bindings and the `kc_ping` MCP tool.
 pub const CRATE_VERSION: &str = env!("CARGO_PKG_VERSION");

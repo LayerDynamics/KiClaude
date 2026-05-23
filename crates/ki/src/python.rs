@@ -159,17 +159,15 @@ fn list_symbols(
     let json_mod = py.import("json")?;
     let overrides_json: String = json_mod.call_method1("dumps", (overrides,))?.extract()?;
     let overrides: std::collections::HashMap<String, String> =
-        serde_json::from_str(&overrides_json).map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!("overrides dict: {e}"))
-        })?;
+        serde_json::from_str(&overrides_json)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("overrides dict: {e}")))?;
 
     let table = crate::library::parse_sym_lib_table(std::path::Path::new(table_path))
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("{e}")))?;
     let index = crate::library::Index::from_lib_table(&table, &overrides);
     let hits = index.search("", usize::MAX);
-    let json_str = serde_json::to_string(&hits).map_err(|e| {
-        pyo3::exceptions::PyValueError::new_err(format!("serialize hits: {e}"))
-    })?;
+    let json_str = serde_json::to_string(&hits)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("serialize hits: {e}")))?;
     let obj = json_mod.call_method1("loads", (json_str,))?;
     Ok(obj.unbind())
 }

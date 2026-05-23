@@ -289,39 +289,37 @@ fn line_on_courtyard(form: &SNode) -> bool {
 }
 
 fn pad_position(pad: &SNode) -> (f64, f64) {
-    find_child(pad, "at")
-        .map_or((0.0, 0.0), |n| {
-            let body: Vec<&SNode> = body_children(n).collect();
-            let x = body
-                .first()
-                .and_then(|n| atom_str(n))
-                .and_then(|s| s.parse::<f64>().ok())
-                .unwrap_or(0.0);
-            let y = body
-                .get(1)
-                .and_then(|n| atom_str(n))
-                .and_then(|s| s.parse::<f64>().ok())
-                .unwrap_or(0.0);
-            (x, y)
-        })
+    find_child(pad, "at").map_or((0.0, 0.0), |n| {
+        let body: Vec<&SNode> = body_children(n).collect();
+        let x = body
+            .first()
+            .and_then(|n| atom_str(n))
+            .and_then(|s| s.parse::<f64>().ok())
+            .unwrap_or(0.0);
+        let y = body
+            .get(1)
+            .and_then(|n| atom_str(n))
+            .and_then(|s| s.parse::<f64>().ok())
+            .unwrap_or(0.0);
+        (x, y)
+    })
 }
 
 fn pad_size(pad: &SNode) -> (f64, f64) {
-    find_child(pad, "size")
-        .map_or((0.0, 0.0), |n| {
-            let body: Vec<&SNode> = body_children(n).collect();
-            let w = body
-                .first()
-                .and_then(|n| atom_str(n))
-                .and_then(|s| s.parse::<f64>().ok())
-                .unwrap_or(0.0);
-            let h = body
-                .get(1)
-                .and_then(|n| atom_str(n))
-                .and_then(|s| s.parse::<f64>().ok())
-                .unwrap_or(0.0);
-            (w, h)
-        })
+    find_child(pad, "size").map_or((0.0, 0.0), |n| {
+        let body: Vec<&SNode> = body_children(n).collect();
+        let w = body
+            .first()
+            .and_then(|n| atom_str(n))
+            .and_then(|s| s.parse::<f64>().ok())
+            .unwrap_or(0.0);
+        let h = body
+            .get(1)
+            .and_then(|n| atom_str(n))
+            .and_then(|s| s.parse::<f64>().ok())
+            .unwrap_or(0.0);
+        (w, h)
+    })
 }
 
 fn point_from(form: &SNode) -> (f64, f64) {
@@ -747,9 +745,7 @@ mod tests {
         fs::write(tmp.path().join("bad.kicad_mod"), "(not_footprint)").expect("write bad");
 
         let mut idx = FootprintIndex::new();
-        let n = idx
-            .add_pretty_dir("MyLib", tmp.path())
-            .expect("dir walk");
+        let n = idx.add_pretty_dir("MyLib", tmp.path()).expect("dir walk");
         assert_eq!(n, 2);
         assert_eq!(idx.len(), 2);
         assert_eq!(idx.errors().len(), 1);

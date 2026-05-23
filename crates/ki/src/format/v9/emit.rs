@@ -217,18 +217,8 @@ fn emit_net_class(nc: &NetClass, out: &mut String) {
         format_float(nc.trace_width_mm)
     )
     .expect("write");
-    write!(
-        out,
-        "\n    (via_dia {})",
-        format_float(nc.via_diameter_mm)
-    )
-    .expect("write");
-    write!(
-        out,
-        "\n    (via_drill {})",
-        format_float(nc.via_drill_mm)
-    )
-    .expect("write");
+    write!(out, "\n    (via_dia {})", format_float(nc.via_diameter_mm)).expect("write");
+    write!(out, "\n    (via_drill {})", format_float(nc.via_drill_mm)).expect("write");
     if let Some(w) = nc.diff_pair_width_mm {
         write!(out, "\n    (diff_pair_width {})", format_float(w)).expect("write");
     }
@@ -304,12 +294,7 @@ fn emit_pad(pad: &Pad, net_id_of: &BTreeMap<String, u32>, out: &mut String) {
     } else {
         pad.shape.as_str()
     };
-    write!(
-        out,
-        "    (pad {} {pad_type} {shape}",
-        quote(&pad.number),
-    )
-    .expect("write");
+    write!(out, "    (pad {} {pad_type} {shape}", quote(&pad.number),).expect("write");
     write!(
         out,
         " (at {} {}",

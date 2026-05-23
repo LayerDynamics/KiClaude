@@ -7,6 +7,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::diffpair::DiffPair;
+use super::lengthgroup::LengthGroup;
 use super::nets::{LayerRef, Net, NetClass, NetClassRef};
 
 /// The PCB view of a [`Project`](super::Project).
@@ -44,6 +46,14 @@ pub struct Pcb {
     pub outline: Outline,
     pub drawings: Vec<Drawing>,
     pub nets: Vec<Net>,
+    /// M3-R-07 — declared differential pairs. Drives the diff-pair
+    /// router (M3-R-04) and the impedance solver (M3-R-02).
+    #[serde(default)]
+    pub diff_pairs: Vec<DiffPair>,
+    /// M3-R-07 — declared length-match groups. Drives the
+    /// length-match analyzer + tuning queue (M3-R-05).
+    #[serde(default)]
+    pub length_groups: Vec<LengthGroup>,
 }
 
 /// A board layer — copper, dielectric, soldermask, silkscreen, etc.
@@ -319,10 +329,7 @@ pub enum PcbInvariantError {
         next_name: String,
     },
     /// A net references a net class that isn't declared in `net_classes`.
-    UnknownNetClass {
-        net: String,
-        class: String,
-    },
+    UnknownNetClass { net: String, class: String },
     /// Two footprints share a refdes. KCIR allows it (KC005 covers it
     /// at schematic level) but the M2 DRC kernel needs unique refdes
     /// for pad addressing.
