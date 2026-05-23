@@ -221,23 +221,37 @@ pub fn compute_thermal_relief(
     rot_deg: f64,
     spec: ThermalReliefSpec,
 ) -> ThermalRelief {
-    let keepout = inflate_pad(center, pad, rot_deg, spec.gap_mm);
+    // KiCad's thermal-relief keepout is the **gap annulus** only —
+    // the band between the pad's outer copper edge and the inflated
+    // outline. The pad copper itself is same-net and pour-fillable;
+    // the central region inside `pad_outer` is therefore NOT part of
+    // the keepout. Subtracting the un-inflated pad shape from the
+    // inflated keepout produces the correct annular keepout.
+    let inflated = inflate_pad(center, pad, rot_deg, spec.gap_mm);
+    let pad_polygon = inflate_pad(center, pad, rot_deg, 0.0);
+    let keepout_annulus =
+        crate::zones::boolean::polygon_difference(&inflated, std::slice::from_ref(&pad_polygon));
     let spokes = if spec.spoke_count == 0 || spec.spoke_width_mm <= 0.0 {
         Vec::new()
     } else {
         build_spokes(center, pad, rot_deg, spec)
     };
-    // Cut the spoke rectangles out of the keepout. The result is one
-    // polygon per connected piece of the keepout-ring-after-cuts; for
-    // the canonical "4 spokes" case the inflated pad is split into 4
-    // corner pieces. We rely on the boolean kernel for the
-    // difference — it correctly handles overlapping spokes and the
-    // case where a spoke fully bisects the keepout.
+    // Cut the spoke rectangles out of the annulus. The result is one
+    // polygon per connected piece of the annulus-after-cuts; for the
+    // canonical "4 spokes" case the annulus is split into 4 corner
+    // ring-segment pieces (the pour bridges the spoke gaps).
     let keepout_pieces = if spokes.is_empty() {
-        vec![keepout]
+        keepout_annulus
     } else {
         let spoke_polys: Vec<Polygon> = spokes.iter().map(ThermalSpoke::to_polygon).collect();
-        crate::zones::boolean::polygon_difference(&keepout, &spoke_polys)
+        let mut cut = Vec::new();
+        for piece in &keepout_annulus {
+            cut.extend(crate::zones::boolean::polygon_difference(
+                piece,
+                &spoke_polys,
+            ));
+        }
+        cut
     };
     ThermalRelief {
         keepout_pieces,
@@ -315,21 +329,25 @@ fn build_spokes(
     // the pad itself. We use the larger of half-extent-x and -y so
     // the spoke always emerges from the pad copper rather than from
     let max_radial = pad.max_radial_extent();
-    // Outer extent: same in every direction — slightly past the
-    // inflated keepout's farthest reach so each spoke positively
-    // pokes out into the pour.
+    // `KiCad`'s spoke inner edge sits at distance `spoke_w / 2` from
+    // the pad centre along the spoke axis. The spoke rectangle has
+    // width `spoke_w` perpendicular to the axis, so the inner-axial
+    // offset of `spoke_w / 2` makes the spoke geometry a *square*-
+    // ended bar starting at `pad_centre + (spoke_w / 2) · direction`.
+    // The earlier "inner at pad edge" choice cut a shorter strip and
+    // mismatched KiCad's wing position by exactly `pad_edge - spoke_w/2`.
+    let inner_r = spec.spoke_width_mm * 0.5;
+    // Outer extent: just past the inflated keepout's farthest reach
+    // so each spoke positively pokes out into the pour. We use the
+    // pad's max radial extent + gap + a `spoke_w` cushion so the
+    // spoke positively reaches past every point on the keepout
+    // outline.
     let outer_r = max_radial + spec.gap_mm + spec.spoke_width_mm.max(0.05);
     let base_rad = (rot_deg + spec.spoke_rotation_deg).to_radians();
     let step = std::f64::consts::TAU / (count as f64);
     for i in 0..count {
         let angle = base_rad + step * (i as f64);
         let (s, c) = angle.sin_cos();
-        // Per-spoke inner radius — the distance from the pad centre
-        // to the pad's outer-copper edge IN THIS SPOKE DIRECTION.
-        // For a circle this is the radius; for a rect it's the
-        // bounding-box edge at this angle, which can be less than
-        // the bounding-box diagonal.
-        let inner_r = pad_edge_distance_in_direction(pad, c, s);
         let inner = Point::new(center.x + c * inner_r, center.y + s * inner_r);
         let outer = Point::new(center.x + c * outer_r, center.y + s * outer_r);
         spokes.push(ThermalSpoke {
@@ -340,27 +358,6 @@ fn build_spokes(
     }
     let _ = max_radial; // referenced by `outer_r` already; silences `unused` if reordered.
     spokes
-}
-
-/// Distance from the pad centre to its outer-copper edge along the
-/// unit direction `(c, s)`. For a circle this is the radius; for a
-/// rect-family pad the edge is the bounding-box rectangle, so the
-/// distance is `min(half_extent_x / |c|, half_extent_y / |s|)`. Used
-/// by [`build_spokes`] to land each spoke on the pad's actual edge in
-/// its own direction.
-fn pad_edge_distance_in_direction(pad: PadShape, c: f64, s: f64) -> f64 {
-    match pad {
-        PadShape::Circle { radius_mm } => radius_mm,
-        PadShape::Rect { size_mm }
-        | PadShape::Oval { size_mm }
-        | PadShape::RoundRect { size_mm, .. } => {
-            let hx = size_mm.0 * 0.5;
-            let hy = size_mm.1 * 0.5;
-            let ac = c.abs().max(1e-9);
-            let as_ = s.abs().max(1e-9);
-            (hx / ac).min(hy / as_)
-        }
-    }
 }
 
 /// Polygon approximation of a circle at the local origin.
@@ -510,10 +507,24 @@ mod tests {
             },
         );
         assert_eq!(r.spokes.len(), 4);
-        // Inner end now sits on the pad's outer copper edge (= radius
-        // for a circle). Outer end is inner + gap + spoke_width:
-        //   inner = 1.0, outer = 1.0 + 0.5 + 0.4 = 1.9.
-        let expected_inner = 1.0;
+        eprintln!("[diag] keepout_pieces={}", r.keepout_pieces.len());
+        for (i, p) in r.keepout_pieces.iter().enumerate() {
+            let bb = p.bounding_box();
+            eprintln!(
+                "[diag] piece {i}: {} outer-pts, {} holes, bb=({:.3},{:.3})..({:.3},{:.3})",
+                p.points.len(),
+                p.holes.len(),
+                bb.min.x,
+                bb.min.y,
+                bb.max.x,
+                bb.max.y,
+            );
+        }
+        // Inner end sits at distance `spoke_w / 2` from the pad
+        // centre along the spoke axis (KiCad pattern). Outer end at
+        // `max_radial + gap + spoke_w`. For a unit-radius circle pad
+        // with spoke_w=0.4 / gap=0.5: inner=0.2, outer=1.9.
+        let expected_inner = 0.4 / 2.0;
         let expected_outer = 1.0 + 0.5 + 0.4;
         // First spoke: rot_deg=0 + spoke_rotation_deg=0 → along +X.
         assert!((r.spokes[0].inner.x - expected_inner).abs() < 1e-9);

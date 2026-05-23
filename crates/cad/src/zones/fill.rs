@@ -97,11 +97,15 @@ pub enum ObstacleGeometry {
     Polygon(Polygon),
     /// A pad with a known shape and rotation. Required when
     /// `thermal_relief` is set so spokes line up with the pad's local
-    /// axes.
+    /// axes. `drill_mm > 0` marks the pad as through-hole: the drill
+    /// disc stays in the keepout even for same-net thermal-relief
+    /// pads (the drill is a mechanical hole and cannot carry copper).
     Pad {
         center: Point,
         shape: PadShape,
         rotation_deg: f64,
+        #[serde(default)]
+        drill_mm: f64,
     },
     /// A track segment with a stroke width.
     Track {
@@ -202,7 +206,8 @@ pub fn fill_zone(input: &ZoneFillInput) -> ZoneFillResult {
     //    `KiCad`'s behaviour — it skips spokes that would otherwise
     //    create non-conducting tongues into adjacent keepouts.
     let mut foreign_polys: Vec<Polygon> = Vec::new();
-    let mut thermal_pad_specs: Vec<(Point, PadShape, f64, ThermalReliefSpec, f64)> = Vec::new();
+    let mut thermal_pad_specs: Vec<(Point, PadShape, f64, ThermalReliefSpec, f64, f64)> =
+        Vec::new();
     for ob in &input.obstacles {
         let extra = ob.extra_clearance_mm.max(0.0);
         match (&ob.thermal_relief, &ob.geometry) {
@@ -212,9 +217,10 @@ pub fn fill_zone(input: &ZoneFillInput) -> ZoneFillResult {
                     center,
                     shape,
                     rotation_deg,
+                    drill_mm,
                 },
             ) => {
-                thermal_pad_specs.push((*center, *shape, *rotation_deg, *spec, extra));
+                thermal_pad_specs.push((*center, *shape, *rotation_deg, *spec, extra, *drill_mm));
             }
             (Some(_), _) => {
                 warnings
@@ -229,9 +235,15 @@ pub fn fill_zone(input: &ZoneFillInput) -> ZoneFillResult {
 
     let mut obstacle_polys: Vec<Polygon> = foreign_polys.clone();
     let mut thermal_spokes: Vec<ThermalSpoke> = Vec::new();
-    for (center, shape, rotation_deg, spec, _extra) in &thermal_pad_specs {
-        // Build the un-cut keepout + candidate spokes.
-        let keepout = super::thermal::inflate_pad(*center, *shape, *rotation_deg, spec.gap_mm);
+    for (center, shape, rotation_deg, spec, _extra, drill_mm) in &thermal_pad_specs {
+        // Build the GAP ANNULUS keepout (inflated pad minus pad
+        // copper outline) — same-net pad copper is pour-fillable,
+        // so the central pad region is NOT part of the keepout.
+        let inflated = super::thermal::inflate_pad(*center, *shape, *rotation_deg, spec.gap_mm);
+        let pad_polygon = super::thermal::inflate_pad(*center, *shape, *rotation_deg, 0.0);
+        let annulus =
+            super::boolean::polygon_difference(&inflated, std::slice::from_ref(&pad_polygon));
+
         let candidate_spokes = if spec.spoke_count == 0 || spec.spoke_width_mm <= 0.0 {
             Vec::new()
         } else {
@@ -243,14 +255,33 @@ pub fn fill_zone(input: &ZoneFillInput) -> ZoneFillResult {
             .into_iter()
             .filter(|s| !point_inside_any(s.outer, &foreign_polys))
             .collect();
-        // Cut the keepout by the surviving spokes.
-        let pieces = if valid_spokes.is_empty() {
-            vec![keepout]
+        // Cut each annulus piece by the surviving spokes.
+        let mut pieces = if valid_spokes.is_empty() {
+            annulus
         } else {
             let spoke_polys: Vec<Polygon> =
                 valid_spokes.iter().map(ThermalSpoke::to_polygon).collect();
-            super::boolean::polygon_difference(&keepout, &spoke_polys)
+            let mut cut = Vec::new();
+            for piece in &annulus {
+                cut.extend(super::boolean::polygon_difference(piece, &spoke_polys));
+            }
+            cut
         };
+        // For through-hole pads, the drill is a mechanical hole — no
+        // pour copper there. Add the drill disc AFTER the spoke cuts
+        // so the spokes (which are copper bridges) cannot carve
+        // through the drill (which is physically a hole).
+        if *drill_mm > 0.0 {
+            let drill_disc = super::thermal::inflate_pad(
+                *center,
+                PadShape::Circle {
+                    radius_mm: drill_mm * 0.5,
+                },
+                0.0,
+                0.0,
+            );
+            pieces.push(drill_disc);
+        }
         obstacle_polys.extend(pieces);
         thermal_spokes.extend(valid_spokes);
     }
@@ -308,6 +339,7 @@ fn inflate_obstacle(geom: &ObstacleGeometry, delta_mm: f64) -> Polygon {
             center,
             shape,
             rotation_deg,
+            drill_mm: _, // foreign-pad keepout = full inflated pad copper; drill is inside it.
         } => inflate_pad(center, shape, rotation_deg, delta_mm),
         ObstacleGeometry::Track {
             start,
@@ -599,6 +631,7 @@ mod tests {
                     center: Point::new(10.0, 10.0),
                     shape: PadShape::Circle { radius_mm: 1.0 },
                     rotation_deg: 0.0,
+                    drill_mm: 0.0,
                 },
                 extra_clearance_mm: 0.0,
                 thermal_relief: Some(ThermalReliefSpec::default()),
@@ -606,14 +639,14 @@ mod tests {
         };
         let r = fill_zone(&input);
         assert_eq!(r.polygons.len(), 1);
-        // Default 4 spokes carve only the gap ring (`pad outer →
-        // keepout outer`); the inner disc (r < pad radius) stays
-        // uncut, so the 4 ring-piece-and-core form a single
-        // connected obstacle. One hole.
+        // For an SMD pad (drill_mm = 0), the thermal-relief keepout
+        // is the gap ANNULUS only (pad copper itself is pour-
+        // fillable, same net). Four cardinal spokes cut the annulus
+        // into 4 ring-segment pieces, each a hole in the pour.
         assert_eq!(
             r.polygons[0].holes.len(),
-            1,
-            "expected 1 keepout hole — spokes carve only the gap ring",
+            4,
+            "expected 4 ring-segment holes after spoke cuts on SMD pad",
         );
         assert_eq!(r.thermal_spokes.len(), 4, "default 4 spokes");
     }

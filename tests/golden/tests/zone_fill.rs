@@ -32,13 +32,14 @@ use kiclaude_ki::kcir::{Pad, Pcb, Zone};
 use kiclaude_ki::sexpr::parse_str;
 
 /// Hausdorff tolerance — the maximum boundary-to-boundary distance
-/// between the algorithm's pour and `KiCad`'s reference pour. Concave
-/// fixtures hit this tightly (0.005 mm); pad-bearing fixtures incur
-/// the same spoke-shape mismatch noted on
-/// [`XOR_AREA_TOLERANCE_MM2`], capped at `0.6 mm`. The XOR-area check
-/// is the primary correctness gate; Hausdorff is reported and tracked
-/// as a secondary diagnostic.
-const HAUSDORFF_TOLERANCE_MM: f64 = 0.6;
+/// between the algorithm's pour and `KiCad`'s reference pour. M2-R-05c
+/// brought this down to `0.005 mm` for concave (no pads) and `0.15
+/// mm` for the SMD-pad `simple` fixture by switching to a gap-
+/// annulus thermal-relief keepout; the THT-pad `thermal` fixture
+/// still sits at `0.35 mm` because KiCad's exact thermal-spoke
+/// geometry for through-hole pads remains under investigation.
+/// The 0.4 mm bound passes all three with margin.
+const HAUSDORFF_TOLERANCE_MM: f64 = 0.4;
 
 /// Sample spacing along polygon boundaries when measuring Hausdorff
 /// distance. Needs to be ≤ HAUSDORFF_TOLERANCE_MM / 2 so the
@@ -49,17 +50,17 @@ const SAMPLE_SPACING_MM: f64 = 0.005;
 
 /// Geometric-fidelity tolerance — the symmetric difference (XOR)
 /// between the algorithm's pour and `KiCad`'s reference pour must
-/// have area ≤ this many `mm²`. Concave fixtures (no pads) hit a
-/// near-zero XOR. Pad-bearing fixtures (simple / thermal) carry a
-/// residual `~0.5–1 mm²` mismatch driven by spoke-shape differences
-/// — `KiCad`'s thermal-spoke geometry uses an internally-offset
-/// rectangle whose precise inner-end placement is undocumented, so
-/// matching it pixel-perfectly requires reverse-engineering proprietary
-/// details. The 1 mm² envelope here represents `< 0.07 %` of the
-/// `1600 mm²` pour area — well inside the noise floor of any practical
-/// fab-output check. Tightening the bound is tracked as a follow-up
-/// once `KiCad`'s exact spoke geometry is documented or its source
-/// is examined.
+/// have area ≤ this many `mm²`. After M2-R-05c's annulus-keepout +
+/// drill-disc refactor:
+///   concave (no pads)  : XOR  0.0025 mm²
+///   simple  (SMD pads) : XOR  0.214  mm²
+///   thermal (THT pads) : XOR  0.809  mm²
+/// The `1 mm²` bound here passes all three with margin. The
+/// `simple`/`thermal` residuals come from KiCad's thermal-spoke
+/// micro-geometry (rounded inner ends, hole-aware cut order) that
+/// remains under investigation; the M2-R-05c follow-up is **not**
+/// closed at the originally-stated 0.01 mm² target. Closing it
+/// requires reading `pcbnew.cpp`'s zone-fill source.
 const XOR_AREA_TOLERANCE_MM2: f64 = 1.0;
 
 #[test]
@@ -283,10 +284,18 @@ fn build_zone_fill_input(pcb: &Pcb, zone: &Zone) -> ZoneFillInput {
             let by = fy + px * sin_f + py * cos_f;
             let rotation_deg = frot + pad.rotation_deg;
             let same_net = pad.net == zone.net && !pad.net.is_empty();
+            // KCIR pad `drill_mm` is a `(width, height)` tuple for
+            // oval drills; for round drills both values match, and
+            // SMD pads carry `None`. Take the width as the
+            // single-axis drill diameter (KiCad enforces width≤height
+            // and treats the smaller dim as the keepout extent for
+            // round-drill DRC).
+            let drill_mm = pad.drill_mm.map_or(0.0, |(w, _h)| w);
             let geometry = ObstacleGeometry::Pad {
                 center: kiclaude_cad::Point::new(bx, by),
                 shape: pad_shape(pad),
                 rotation_deg,
+                drill_mm,
             };
             obstacles.push(Obstacle {
                 geometry,
