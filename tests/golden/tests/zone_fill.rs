@@ -121,13 +121,14 @@ fn run_fixture(stem: &str) {
     // geometric set even if their boundary topologies differ.
     let reference_polys = normalize_reference(&zone.filled_polygons);
     let xor_area = symmetric_difference_area(&combined_algorithm_polys, &reference_polys);
+    let hausdorff = symmetric_hausdorff(&reference_samples, &algorithm_samples);
+    eprintln!("[m2-r-05c] {stem}: XOR={xor_area:.6} mm², Hausdorff={hausdorff:.6} mm",);
     assert!(
         xor_area <= XOR_AREA_TOLERANCE_MM2,
         "{stem}: symmetric-difference area {xor_area:.6} mm² exceeds \
          {XOR_AREA_TOLERANCE_MM2} mm² tolerance",
     );
 
-    let hausdorff = symmetric_hausdorff(&reference_samples, &algorithm_samples);
     assert!(
         hausdorff <= HAUSDORFF_TOLERANCE_MM,
         "{stem}: Hausdorff distance {hausdorff:.4} mm exceeds {HAUSDORFF_TOLERANCE_MM} mm \

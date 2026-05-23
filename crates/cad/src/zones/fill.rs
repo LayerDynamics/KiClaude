@@ -247,7 +247,13 @@ pub fn fill_zone(input: &ZoneFillInput) -> ZoneFillResult {
         let candidate_spokes = if spec.spoke_count == 0 || spec.spoke_width_mm <= 0.0 {
             Vec::new()
         } else {
-            super::thermal::build_spokes_public(*center, *shape, *rotation_deg, *spec)
+            super::thermal::build_spokes_public(
+                *center,
+                *shape,
+                *rotation_deg,
+                *spec,
+                input.min_thickness_mm,
+            )
         };
         // Validate spokes: skip ones whose outer endpoint sits
         // inside any foreign obstacle.
@@ -255,7 +261,15 @@ pub fn fill_zone(input: &ZoneFillInput) -> ZoneFillResult {
             .into_iter()
             .filter(|s| !point_inside_any(s.outer, &foreign_polys))
             .collect();
-        // Cut each annulus piece by the surviving spokes.
+        // Cut each annulus piece by the surviving spokes at their
+        // nominal `spec.spoke_width_mm`. KiCad's filler additionally
+        // runs a deflate/inflate (Minkowski closing) on the union of
+        // (pour ∪ spokes) at `min_thickness/2` — that pass narrows
+        // the spoke channel by ~`min_thickness` and rounds the
+        // channel-to-arc corners. Reproducing that exactly requires
+        // implementing KiCad's full smoothing pipeline; we leave the
+        // nominal-width cut here as the architecturally-correct
+        // approximation. See plan task M2-R-05c.
         let mut pieces = if valid_spokes.is_empty() {
             annulus
         } else {

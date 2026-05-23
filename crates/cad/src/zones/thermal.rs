@@ -209,6 +209,11 @@ pub struct ThermalRelief {
 /// pad's local X axis (`spoke_rotation_deg = 0`) rotated to the board
 /// frame using `rot_deg + spec.spoke_rotation_deg`.
 ///
+/// `min_thickness_mm` is the parent zone's minimum thickness, used by
+/// `KiCad`'s filler to inflate the spoke bbox by `min_thickness/2`
+/// (compensates for the deflate/inflate smoothing pass that follows
+/// fill). Pass `0.0` if your fill pipeline does not run that pass.
+///
 /// # Panics
 ///
 /// Never panics. Invalid input (e.g. `spoke_count = 0`,
@@ -220,6 +225,7 @@ pub fn compute_thermal_relief(
     pad: PadShape,
     rot_deg: f64,
     spec: ThermalReliefSpec,
+    min_thickness_mm: f64,
 ) -> ThermalRelief {
     // KiCad's thermal-relief keepout is the **gap annulus** only —
     // the band between the pad's outer copper edge and the inflated
@@ -234,7 +240,7 @@ pub fn compute_thermal_relief(
     let spokes = if spec.spoke_count == 0 || spec.spoke_width_mm <= 0.0 {
         Vec::new()
     } else {
-        build_spokes(center, pad, rot_deg, spec)
+        build_spokes(center, pad, rot_deg, spec, min_thickness_mm)
     };
     // Cut the spoke rectangles out of the annulus. The result is one
     // polygon per connected piece of the annulus-after-cuts; for the
@@ -307,14 +313,57 @@ pub fn inflate_pad(center: Point, pad: PadShape, rot_deg: f64, delta_mm: f64) ->
 /// Public wrapper around the spoke-construction helper so
 /// [`super::fill::fill_zone`] can validate candidate spokes against
 /// adjacent obstacles before committing them to the keepout cut.
+///
+/// `min_thickness_mm` is the parent zone's minimum thickness —
+/// `KiCad`'s filler inflates the pad's spoke bounding box by
+/// `min_thickness/2` to compensate for a later deflate pass. Mirror
+/// that compensation here so the spoke geometry matches the
+/// post-deflation polygon `KiCad` actually saves to `.kicad_pcb`.
 #[must_use]
 pub fn build_spokes_public(
     center: Point,
     pad: PadShape,
     rot_deg: f64,
     spec: ThermalReliefSpec,
+    min_thickness_mm: f64,
 ) -> Vec<ThermalSpoke> {
-    build_spokes(center, pad, rot_deg, spec)
+    build_spokes(center, pad, rot_deg, spec, min_thickness_mm)
+}
+
+/// Polygon-approximation tolerance used as `epsilon` in spoke-bbox
+/// inflation. `KiCad` uses `bds.m_MaxError` (typically `0.005 mm`);
+/// matching that value keeps the post-deflation spoke length aligned
+/// with `KiCad`'s output to within the polygon discretisation floor.
+const SPOKE_EPSILON_MM: f64 = 0.005;
+
+/// Half-extent of the pad's local-frame axis-aligned bounding box
+/// along the spoke's axis. `KiCad`'s `buildSpokesFromOrigin` uses
+/// the pad bbox (not the radial extent), so off-axis pad shapes —
+/// e.g. a 1×3 mm oval — get axis-direction-dependent spoke lengths.
+///
+/// `axis_rad` is the spoke's angle in the pad's local frame (after
+/// subtracting `rot_deg`). For cardinal angles (0°, 90°, 180°, 270°)
+/// this returns the bbox half-extent along that axis. For off-axis
+/// angles it returns the distance from the pad centre to the bbox
+/// edge along the spoke direction — matching `intersectBBox`'s
+/// `min(half_size.x / |cos θ|, half_size.y / |sin θ|)` for `dx ≠ 0
+/// && dy ≠ 0` and the cardinal short-circuits otherwise.
+fn pad_bbox_extent_along(pad: PadShape, axis_rad: f64) -> f64 {
+    let hx = pad.half_extent_x();
+    let hy = pad.half_extent_y();
+    let dx = axis_rad.cos();
+    let dy = axis_rad.sin();
+    // Cardinal axes: KiCad short-circuits these because the off-axis
+    // intersection formula goes degenerate.
+    if dx.abs() < 1e-12 {
+        return hy;
+    }
+    if dy.abs() < 1e-12 {
+        return hx;
+    }
+    let dist_x = hx / dx.abs();
+    let dist_y = hy / dy.abs();
+    dist_x.min(dist_y)
 }
 
 fn build_spokes(
@@ -322,41 +371,41 @@ fn build_spokes(
     pad: PadShape,
     rot_deg: f64,
     spec: ThermalReliefSpec,
+    min_thickness_mm: f64,
 ) -> Vec<ThermalSpoke> {
     let count = usize::from(spec.spoke_count);
     let mut spokes = Vec::with_capacity(count);
-    // Inner radius: longest pad half-extent, so the spoke starts on
-    // the pad itself. We use the larger of half-extent-x and -y so
-    // the spoke always emerges from the pad copper rather than from
-    let max_radial = pad.max_radial_extent();
-    // `KiCad`'s spoke inner edge sits at distance `spoke_w / 2` from
-    // the pad centre along the spoke axis. The spoke rectangle has
-    // width `spoke_w` perpendicular to the axis, so the inner-axial
-    // offset of `spoke_w / 2` makes the spoke geometry a *square*-
-    // ended bar starting at `pad_centre + (spoke_w / 2) · direction`.
-    // The earlier "inner at pad edge" choice cut a shorter strip and
-    // mismatched KiCad's wing position by exactly `pad_edge - spoke_w/2`.
-    let inner_r = spec.spoke_width_mm * 0.5;
-    // Outer extent: just past the inflated keepout's farthest reach
-    // so each spoke positively pokes out into the pour. We use the
-    // pad's max radial extent + gap + a `spoke_w` cushion so the
-    // spoke positively reaches past every point on the keepout
-    // outline.
-    let outer_r = max_radial + spec.gap_mm + spec.spoke_width_mm.max(0.05);
+    let zone_half_width = min_thickness_mm.max(0.0) * 0.5;
     let base_rad = (rot_deg + spec.spoke_rotation_deg).to_radians();
+    let pad_local_rot = spec.spoke_rotation_deg.to_radians();
     let step = std::f64::consts::TAU / (count as f64);
     for i in 0..count {
-        let angle = base_rad + step * (i as f64);
-        let (s, c) = angle.sin_cos();
-        let inner = Point::new(center.x + c * inner_r, center.y + s * inner_r);
+        // Board-frame angle for the spoke axis (used to place the
+        // endpoints in board coordinates).
+        let board_angle = base_rad + step * (i as f64);
+        // Pad-local angle for the spoke axis (used to measure the
+        // bbox extent — KiCad rotates the pad to ANGLE_0 before
+        // measuring, so we strip `rot_deg` and only carry the
+        // `spoke_rotation_deg` offset).
+        let local_angle = pad_local_rot + step * (i as f64);
+        let half_extent = pad_bbox_extent_along(pad, local_angle);
+        // KiCad: `spokesBox.Inflate( thermalReliefGap + epsilon +
+        // zone_half_width );` then spoke outer is at the inflated
+        // bbox edge along the axis.
+        let outer_r = half_extent + spec.gap_mm + SPOKE_EPSILON_MM + zone_half_width;
+        let (s, c) = board_angle.sin_cos();
+        // KiCad: the spoke's two inner vertices are `center ±
+        // spoke_side` — i.e. AT the pad centre, offset only
+        // perpendicularly. `ThermalSpoke::to_polygon` already
+        // perpendicular-offsets by `width/2`, so we set the
+        // centerline inner endpoint = pad centre.
         let outer = Point::new(center.x + c * outer_r, center.y + s * outer_r);
         spokes.push(ThermalSpoke {
-            inner,
+            inner: center,
             outer,
             width_mm: spec.spoke_width_mm,
         });
     }
-    let _ = max_radial; // referenced by `outer_r` already; silences `unused` if reordered.
     spokes
 }
 
@@ -505,30 +554,20 @@ mod tests {
                 spoke_count: 4,
                 spoke_rotation_deg: 0.0,
             },
+            0.0,
         );
         assert_eq!(r.spokes.len(), 4);
-        eprintln!("[diag] keepout_pieces={}", r.keepout_pieces.len());
-        for (i, p) in r.keepout_pieces.iter().enumerate() {
-            let bb = p.bounding_box();
-            eprintln!(
-                "[diag] piece {i}: {} outer-pts, {} holes, bb=({:.3},{:.3})..({:.3},{:.3})",
-                p.points.len(),
-                p.holes.len(),
-                bb.min.x,
-                bb.min.y,
-                bb.max.x,
-                bb.max.y,
-            );
-        }
-        // Inner end sits at distance `spoke_w / 2` from the pad
-        // centre along the spoke axis (KiCad pattern). Outer end at
-        // `max_radial + gap + spoke_w`. For a unit-radius circle pad
-        // with spoke_w=0.4 / gap=0.5: inner=0.2, outer=1.9.
-        let expected_inner = 0.4 / 2.0;
-        let expected_outer = 1.0 + 0.5 + 0.4;
+        // KiCad pattern: spoke inner endpoint sits AT the pad centre
+        // (the two inner vertices in `to_polygon` are `centre ±
+        // (spoke_w/2) · perpendicular`). Outer endpoint sits at
+        // `pad_bbox_half + gap + epsilon + min_thickness/2` along the
+        // axis. For a unit-radius circle pad (bbox half = 1.0) with
+        // spoke_w=0.4 / gap=0.5 / min_thickness=0: outer = 1.0 + 0.5
+        // + 0.005 = 1.505.
+        let expected_outer = 1.0 + 0.5 + super::SPOKE_EPSILON_MM;
         // First spoke: rot_deg=0 + spoke_rotation_deg=0 → along +X.
-        assert!((r.spokes[0].inner.x - expected_inner).abs() < 1e-9);
-        assert!(r.spokes[0].inner.y.abs() < 1e-9);
+        assert!(r.spokes[0].inner.x.abs() < 1e-12);
+        assert!(r.spokes[0].inner.y.abs() < 1e-12);
         assert!((r.spokes[0].outer.x - expected_outer).abs() < 1e-9);
         assert!(r.spokes[0].outer.y.abs() < 1e-9);
         // Second spoke: at +90° → along +Y.
@@ -550,6 +589,7 @@ mod tests {
                 spoke_count: 2,
                 spoke_rotation_deg: 0.0,
             },
+            0.0,
         );
         assert_eq!(r.spokes.len(), 2);
         // 180° apart.
@@ -576,6 +616,7 @@ mod tests {
                 spoke_count: 0,
                 spoke_rotation_deg: 0.0,
             },
+            0.0,
         );
         assert!(r.spokes.is_empty());
     }
@@ -607,6 +648,7 @@ mod tests {
             },
             90.0,
             ThermalReliefSpec::default(),
+            0.0,
         );
         assert!(
             r.spokes[0].outer.x.abs() < 1e-9,
