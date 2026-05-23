@@ -18,6 +18,7 @@ pub mod index;
 pub mod length_match;
 pub mod routing;
 pub mod scene;
+pub mod three_scene;
 pub mod zones;
 
 #[cfg(target_arch = "wasm32")]
