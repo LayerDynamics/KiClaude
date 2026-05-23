@@ -116,7 +116,7 @@ pub enum ObstacleGeometry {
 }
 
 /// All the knobs `fill_zone` operates on.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ZoneFillInput {
     /// User-drawn zone outline. Assumed CCW (the offset code reorders
     /// internally if it isn't).
@@ -133,7 +133,7 @@ pub struct ZoneFillInput {
 }
 
 /// Output of [`fill_zone`].
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, serde::Serialize, serde::Deserialize)]
 pub struct ZoneFillResult {
     /// Filled copper polygons. M2 always emits a single polygon (the
     /// inset outline with obstacle holes); a Clipper-style follow-up

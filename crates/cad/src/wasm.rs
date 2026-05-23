@@ -8,6 +8,7 @@ use wasm_bindgen::prelude::*;
 
 use crate::drc::{check_all, DrcInput, DrcIssue};
 use crate::geom::{BBox, Point, Polygon};
+use crate::zones::fill::{fill_zone, ZoneFillInput, ZoneFillResult};
 
 /// `kiclaude-cad` crate version.
 #[wasm_bindgen(js_name = crateVersion)]
@@ -105,4 +106,23 @@ pub fn check_drc(input_json: &str) -> Result<String, JsValue> {
     let issues: Vec<DrcIssue> = check_all(&input);
     serde_json::to_string(&issues)
         .map_err(|e| JsValue::from_str(&format!("DrcIssue serialization: {e}")))
+}
+
+/// Run the M2-R-05 zone-fill pipeline against a serialized
+/// [`ZoneFillInput`] and return the resulting [`ZoneFillResult`] as
+/// JSON. Used by the React [`ZoneTool`] (M2-T-04) to compute the
+/// live fill preview while the user is still drawing the zone
+/// outline — the wasm round-trip is cheap enough (<5ms on the M2
+/// reference fixtures) to fire on each pointer move.
+///
+/// # Errors
+/// Returns a JS error when the input JSON cannot be parsed as
+/// `ZoneFillInput` or when the output cannot be serialized.
+#[wasm_bindgen(js_name = fillZone)]
+pub fn fill_zone_wasm(input_json: &str) -> Result<String, JsValue> {
+    let input: ZoneFillInput = serde_json::from_str(input_json)
+        .map_err(|e| JsValue::from_str(&format!("invalid ZoneFillInput JSON: {e}")))?;
+    let result: ZoneFillResult = fill_zone(&input);
+    serde_json::to_string(&result)
+        .map_err(|e| JsValue::from_str(&format!("ZoneFillResult serialization: {e}")))
 }
