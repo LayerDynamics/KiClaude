@@ -6,6 +6,7 @@
 
 use wasm_bindgen::prelude::*;
 
+use crate::drc::{check_all, DrcInput, DrcIssue};
 use crate::geom::{BBox, Point, Polygon};
 
 /// `kiclaude-cad` crate version.
@@ -82,3 +83,26 @@ struct BBoxJs {
 const _: fn() = || {
     let _ = std::mem::size_of::<BBox>();
 };
+
+/// Run the full DRC kernel (M2-R-06) against a serialized [`DrcInput`].
+///
+/// Input is a JSON string matching `DrcInput`'s serde shape; output is
+/// a JSON string carrying `Vec<DrcIssue>` (or a JS error on parse
+/// failure). The string-in/string-out boundary is chosen so the
+/// React `RouteTool` (M2-T-03) can build the input via JSON.stringify
+/// of a TS interface that mirrors the Rust shape without needing a
+/// hand-marshalled wasm-bindgen struct surface per field.
+///
+/// # Errors
+/// Returns a JS error when the input JSON cannot be parsed as
+/// `DrcInput`. Output serialization failures are also surfaced as JS
+/// errors — both indicate the caller is shipping mis-shaped data and
+/// should be treated as a programming bug, not a runtime warning.
+#[wasm_bindgen(js_name = checkDrc)]
+pub fn check_drc(input_json: &str) -> Result<String, JsValue> {
+    let input: DrcInput = serde_json::from_str(input_json)
+        .map_err(|e| JsValue::from_str(&format!("invalid DrcInput JSON: {e}")))?;
+    let issues: Vec<DrcIssue> = check_all(&input);
+    serde_json::to_string(&issues)
+        .map_err(|e| JsValue::from_str(&format!("DrcIssue serialization: {e}")))
+}
