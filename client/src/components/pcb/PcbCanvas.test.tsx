@@ -1,13 +1,45 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, fireEvent, act } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { useProjectStore, type KcirProject } from "../../stores/projectStore";
+import { usePcbViewStore } from "../../stores/pcbViewStore";
+import { useSelectionStore } from "../../stores/selectionStore";
 
 import { PcbCanvas } from "./PcbCanvas";
 
+const sampleProject: KcirProject = {
+  kcir_version: "0.3",
+  name: "blinky",
+  metadata: { title: "blinky", revision: "", company: "", date: "" },
+  net_classes: [],
+  pcb: {
+    version: 1,
+    generator: "kiclaude",
+    layers: [
+      { id: 0, name: "F.Cu", kind: "copper" },
+      { id: 31, name: "B.Cu", kind: "copper" },
+      { id: 37, name: "F.SilkS", kind: "silkscreen" },
+      { id: 44, name: "Edge.Cuts", kind: "outline" },
+    ],
+    footprints: [],
+    tracks: [],
+    vias: [],
+    zones: [],
+    nets: [],
+  },
+};
+
 describe("PcbCanvas", () => {
   beforeEach(() => {
-    // happy-dom does not implement WebGL or kicanvas's custom elements,
-    // so every test in this file uses the injected `loader` seam to
-    // stand in for the real bridge.
+    act(() => {
+      useProjectStore.getState().clear();
+      usePcbViewStore.setState({
+        layers: [],
+        layerView: {},
+        activeLayerId: null,
+      });
+      useSelectionStore.getState().clear();
+    });
   });
   afterEach(() => cleanup());
 
@@ -63,7 +95,6 @@ describe("PcbCanvas", () => {
       expect(source?.getAttribute("src")).toBe("/examples/b.kicad_pcb");
     });
     const secondEmbed = screen.getByTestId("pcb-canvas").querySelector("kicanvas-embed");
-    // `key={src}` should force a fresh DOM node when the src URL flips.
     expect(secondEmbed).not.toBe(firstEmbed);
   });
 
@@ -93,5 +124,94 @@ describe("PcbCanvas", () => {
     });
     expect(embed.getAttribute("controls")).toBe("basic");
     expect(embed.getAttribute("controlslist")).toBe("nodownload nooverlay");
+  });
+
+  it("hydrates pcbViewStore.layers from the project store", async () => {
+    const loader = vi.fn().mockResolvedValue({ status: "ready", cached: true });
+    act(() => {
+      useProjectStore.getState().setProject(sampleProject);
+    });
+    render(<PcbCanvas src="/examples/blinky/blinky.kicad_pcb" loader={loader} />);
+    await waitFor(() => {
+      expect(usePcbViewStore.getState().layers.length).toBe(4);
+    });
+    // First copper layer should win as default active.
+    expect(usePcbViewStore.getState().activeLayerId).toBe(0);
+  });
+
+  it("PgUp / PgDn cycle the active layer through the stack", async () => {
+    const loader = vi.fn().mockResolvedValue({ status: "ready", cached: true });
+    act(() => {
+      useProjectStore.getState().setProject(sampleProject);
+    });
+    render(<PcbCanvas src="/examples/blinky/blinky.kicad_pcb" loader={loader} />);
+    const root = await waitFor(() => {
+      const el = screen.getByTestId("pcb-canvas");
+      if (el.dataset.status !== "ready") throw new Error("not ready");
+      return el;
+    });
+    // Active starts on layer 0 (F.Cu).
+    expect(usePcbViewStore.getState().activeLayerId).toBe(0);
+    // PgDn moves to the next layer in declaration order (B.Cu = 31).
+    fireEvent.keyDown(root, { key: "PageDown" });
+    expect(usePcbViewStore.getState().activeLayerId).toBe(31);
+    // PgUp wraps back to F.Cu.
+    fireEvent.keyDown(root, { key: "PageUp" });
+    expect(usePcbViewStore.getState().activeLayerId).toBe(0);
+    // PgUp from the first layer wraps to the last (Edge.Cuts = 44).
+    fireEvent.keyDown(root, { key: "PageUp" });
+    expect(usePcbViewStore.getState().activeLayerId).toBe(44);
+  });
+
+  it("Escape clears the selection set", async () => {
+    const loader = vi.fn().mockResolvedValue({ status: "ready", cached: true });
+    act(() => {
+      useProjectStore.getState().setProject(sampleProject);
+      useSelectionStore.getState().select([
+        { kind: "footprint", uuid: "abc" },
+        { kind: "track", uuid: "def" },
+      ]);
+    });
+    render(<PcbCanvas src="/examples/blinky/blinky.kicad_pcb" loader={loader} />);
+    const root = await waitFor(() => {
+      const el = screen.getByTestId("pcb-canvas");
+      if (el.dataset.status !== "ready") throw new Error("not ready");
+      return el;
+    });
+    expect(useSelectionStore.getState().selected).toHaveLength(2);
+    fireEvent.keyDown(root, { key: "Escape" });
+    expect(useSelectionStore.getState().selected).toHaveLength(0);
+  });
+
+  it("renders LayerStack alongside the canvas by default", async () => {
+    const loader = vi.fn().mockResolvedValue({ status: "ready", cached: true });
+    act(() => {
+      useProjectStore.getState().setProject(sampleProject);
+    });
+    render(<PcbCanvas src="/examples/blinky/blinky.kicad_pcb" loader={loader} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("pcb-canvas").dataset.status).toBe("ready"),
+    );
+    expect(screen.getByTestId("layer-stack")).toBeTruthy();
+    // 4 layer rows match the sample project's `pcb.layers`.
+    expect(screen.getAllByTestId("layer-row")).toHaveLength(4);
+  });
+
+  it("hides LayerStack when showLayerPanel=false", async () => {
+    const loader = vi.fn().mockResolvedValue({ status: "ready", cached: true });
+    act(() => {
+      useProjectStore.getState().setProject(sampleProject);
+    });
+    render(
+      <PcbCanvas
+        src="/examples/blinky/blinky.kicad_pcb"
+        loader={loader}
+        showLayerPanel={false}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("pcb-canvas").dataset.status).toBe("ready"),
+    );
+    expect(screen.queryByTestId("layer-stack")).toBeNull();
   });
 });
