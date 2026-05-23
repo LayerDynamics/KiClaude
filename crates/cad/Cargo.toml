@@ -20,6 +20,10 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
+# KCIR types — needed by the M3-R-05 length-match analyzer to walk
+# `Pcb.tracks` + `Pcb.length_groups`. One-way dep (cad → ki); ki
+# does NOT depend on cad to keep the schema crate free of geometry.
+kiclaude-ki = { path = "../ki" }
 # MIT-licensed Vatti-style polygon boolean kernel — drives the
 # zone-fill obstacle union + boundary clipping (M2-R-05a). No GPL
 # contamination (cf. SPEC NFR-009 / deny.toml license allowlist).

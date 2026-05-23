@@ -294,7 +294,7 @@ fn emit_pad(pad: &Pad, net_id_of: &BTreeMap<String, u32>, out: &mut String) {
     } else {
         pad.shape.as_str()
     };
-    write!(out, "    (pad {} {pad_type} {shape}", quote(&pad.number),).expect("write");
+    write!(out, "    (pad {} {pad_type} {shape}", quote(&pad.number)).expect("write");
     write!(
         out,
         " (at {} {}",

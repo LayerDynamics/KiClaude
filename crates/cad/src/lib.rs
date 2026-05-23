@@ -15,6 +15,7 @@ pub mod drc;
 pub mod geom;
 pub mod impedance;
 pub mod index;
+pub mod length_match;
 pub mod routing;
 pub mod scene;
 pub mod zones;
