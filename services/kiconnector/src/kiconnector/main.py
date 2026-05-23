@@ -21,6 +21,9 @@ M2-P-02:
 M2-P-03:
 - `POST /tools/bom` — `kicad-cli sch export bom`.
 
+M3-P-09:
+- `POST /tools/step` — `kicad-cli pcb export step` → `<board>.step`.
+
 Every fab endpoint returns a structured envelope with `ok` distinguishing
 "ran clean" from "kicad-cli unavailable or timed out".
 """
@@ -44,6 +47,7 @@ from kiconnector.erc import DEFAULT_TIMEOUT_S, run_erc
 from kiconnector.export import (
     DEFAULT_GERBER_LAYERS,
     export_drill,
+    export_step,
     export_gerbers,
     export_pos,
 )
@@ -112,6 +116,18 @@ class BomRequest(BaseModel):
     sch_path: str = Field(..., min_length=1, max_length=4_096)
     output_dir: str = Field(..., min_length=1, max_length=4_096)
     timeout_s: float = Field(default=BOM_TIMEOUT_S, ge=1.0, le=600.0)
+
+
+class StepRequest(BaseModel):
+    """Body for `POST /tools/step` (M3-P-09)."""
+
+    pcb_path: str = Field(..., min_length=1, max_length=4_096)
+    output_dir: str = Field(..., min_length=1, max_length=4_096)
+    timeout_s: float = Field(default=EXPORT_TIMEOUT_S, ge=1.0, le=900.0)
+    no_dnp: bool = True
+    no_unspecified: bool = False
+    subst_models: bool = True
+    board_only: bool = False
 
 
 class FreeroutingRequest(BaseModel):
@@ -272,6 +288,36 @@ async def tools_pos(req: PosRequest) -> dict[str, Any]:
         pcb_path=req.pcb_path,
         output_dir=req.output_dir,
         side=req.side,
+        ok=artifact.ok,
+        files=len(artifact.files),
+        exit_code=artifact.exit_code,
+        duration_ms=artifact.duration_ms,
+    )
+    if not artifact.ok and artifact.error and "not on PATH" in artifact.error:
+        raise HTTPException(status_code=503, detail=artifact.error)
+    return artifact.to_dict()
+
+
+@app.post("/tools/step")
+async def tools_step(req: StepRequest) -> dict[str, Any]:
+    """Run `kicad-cli pcb export step` and return the produced
+    `.step` file (M3-P-09). Drives the M3-T-06 `kithree` 3D viewer
+    + the M3-R-06 STEP-placement scene builder."""
+    artifact = await export_step(
+        req.pcb_path,
+        req.output_dir,
+        timeout_s=req.timeout_s,
+        no_dnp=req.no_dnp,
+        no_unspecified=req.no_unspecified,
+        subst_models=req.subst_models,
+        board_only=req.board_only,
+    )
+    log.info(
+        "step_export",
+        pcb_path=req.pcb_path,
+        output_dir=req.output_dir,
+        no_dnp=req.no_dnp,
+        board_only=req.board_only,
         ok=artifact.ok,
         files=len(artifact.files),
         exit_code=artifact.exit_code,

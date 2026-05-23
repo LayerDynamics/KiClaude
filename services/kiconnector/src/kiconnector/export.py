@@ -320,6 +320,59 @@ def _duration(started: float) -> int:
     return max(0, int(delta * 1000.0))
 
 
+async def export_step(
+    pcb_path: str | Path,
+    output_dir: str | Path,
+    *,
+    timeout_s: float = DEFAULT_TIMEOUT_S,
+    kicad_cli_binary: str = "kicad-cli",
+    no_dnp: bool = True,
+    no_unspecified: bool = False,
+    subst_models: bool = True,
+    board_only: bool = False,
+) -> ExportArtifact:
+    """Run `kicad-cli pcb export step` and return the produced
+    `<board>.step` file (M3-P-09).
+
+    Defaults align with how the M3-T-06 `kithree` viewer expects to
+    consume the model: include components (so the 3D scene shows ICs
+    + connectors), skip DNP parts (matches the BOM the assembler
+    sees), and prefer STEP/IGS over VRML where both are present.
+    Pass `board_only=True` for a bare board with no components.
+    """
+    target, out_dir, prep_err = _prep(pcb_path, output_dir)
+    if prep_err is not None:
+        return _err("step", out_dir, prep_err, duration_ms=0)
+    binary = shutil.which(kicad_cli_binary)
+    if binary is None:
+        return _err(
+            "step",
+            out_dir,
+            f"{kicad_cli_binary} not on PATH",
+            duration_ms=0,
+        )
+    stem = Path(target).stem or "board"
+    output_path = str(Path(out_dir) / f"{stem}.step")
+    args: list[str] = [
+        "pcb",
+        "export",
+        "step",
+        "--output",
+        output_path,
+        "--force",
+    ]
+    if no_dnp:
+        args.append("--no-dnp")
+    if no_unspecified:
+        args.append("--no-unspecified")
+    if subst_models:
+        args.append("--subst-models")
+    if board_only:
+        args.append("--board-only")
+    args.append(target)
+    return await _run("step", binary, args, out_dir, timeout_s)
+
+
 __all__ = [
     "DEFAULT_GERBER_LAYERS",
     "DEFAULT_TIMEOUT_S",
@@ -327,4 +380,5 @@ __all__ = [
     "export_drill",
     "export_gerbers",
     "export_pos",
+    "export_step",
 ]

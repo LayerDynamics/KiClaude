@@ -31,12 +31,29 @@ export default defineConfig({
     screenshot: "only-on-failure",
     video: "retain-on-failure",
   },
-  projects: [
-    {
+  // M3-Q-06: cross-browser matrix. Chromium is the default everywhere
+  // (M0 smoke baseline). Firefox + WebKit are opt-in via
+  // `E2E_CROSS_BROWSER=1` so local laptop dev runs don't pay the
+  // 3× startup cost. CI always runs all three.
+  projects: (() => {
+    const baseChromium = {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
-    },
-  ],
+    };
+    const wantCrossBrowser = isCI || process.env.E2E_CROSS_BROWSER === "1";
+    if (!wantCrossBrowser) return [baseChromium];
+    return [
+      baseChromium,
+      {
+        name: "firefox",
+        use: { ...devices["Desktop Firefox"] },
+      },
+      {
+        name: "webkit",
+        use: { ...devices["Desktop Safari"] },
+      },
+    ];
+  })(),
   webServer: process.env.E2E_BASE_URL
     ? undefined
     : {

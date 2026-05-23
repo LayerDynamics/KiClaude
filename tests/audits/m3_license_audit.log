@@ -1,0 +1,81 @@
+
+==== Rust (cargo-deny) ====
+warning[license-not-encountered]: license was not encountered
+   ┌─ /Users/ryanoboyle/kiclaude/deny.toml:25:6
+   │
+25 │     "Apache-2.0 WITH LLVM-exception",
+   │      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ unmatched license allowance
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /Users/ryanoboyle/kiclaude/deny.toml:28:6
+   │
+28 │     "BSD-2-Clause",
+   │      ━━━━━━━━━━━━ unmatched license allowance
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /Users/ryanoboyle/kiclaude/deny.toml:29:6
+   │
+29 │     "BSD-3-Clause",
+   │      ━━━━━━━━━━━━ unmatched license allowance
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /Users/ryanoboyle/kiclaude/deny.toml:35:6
+   │
+35 │     "BSL-1.0",
+   │      ━━━━━━━ unmatched license allowance
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /Users/ryanoboyle/kiclaude/deny.toml:36:6
+   │
+36 │     "CC0-1.0",
+   │      ━━━━━━━ unmatched license allowance
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /Users/ryanoboyle/kiclaude/deny.toml:30:6
+   │
+30 │     "ISC",
+   │      ━━━ unmatched license allowance
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /Users/ryanoboyle/kiclaude/deny.toml:27:6
+   │
+27 │     "MIT-0",
+   │      ━━━━━ unmatched license allowance
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /Users/ryanoboyle/kiclaude/deny.toml:31:6
+   │
+31 │     "MPL-2.0",
+   │      ━━━━━━━ unmatched license allowance
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /Users/ryanoboyle/kiclaude/deny.toml:33:6
+   │
+33 │     "Unicode-DFS-2016",
+   │      ━━━━━━━━━━━━━━━━ unmatched license allowance
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /Users/ryanoboyle/kiclaude/deny.toml:34:6
+   │
+34 │     "Zlib",
+   │      ━━━━ unmatched license allowance
+
+licenses ok
+
+==== Node (pnpm) ====
+OK: all production Node deps under allowlist.
+
+==== Python (uv pip + importlib.metadata) ====
+WARN: Python packages with non-allowlisted license metadata:
+shellingham: ISC License
+structlog: MIT OR Apache-2.0
+packaging: Apache-2.0 OR BSD-2-Clause
+cryptography: Apache-2.0 OR BSD-3-Clause
+sniffio: MIT OR Apache-2.0
+mdurl: MIT License
+markdown-it-py: MIT License
+uvloop: MIT License
+annotated-types: MIT License
+
+==== Summary ====
+license_audit.sh: PASS
