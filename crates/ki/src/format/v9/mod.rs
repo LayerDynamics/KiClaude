@@ -13,7 +13,7 @@ pub mod sch_emit;
 pub mod sexpr_helpers;
 pub mod symbols;
 
-pub use emit::emit_pcb;
+pub use emit::{emit_pcb, emit_pcb_with_stackup};
 pub use sch::{map_sch, merge_into_schematic, ParsedSheet};
 pub use sch_emit::{emit_sch, emit_sch_canonical, emit_sch_with_edits, span_key, EditedSpans};
 
@@ -218,7 +218,17 @@ impl KiProject {
     /// Returns [`OpenError::Io`] on write failure or
     /// [`OpenError::Mapping`] if the `.kicad_pro` stem is not valid UTF-8.
     pub fn save_pcb(&self) -> Result<PathBuf, OpenError> {
-        let text = emit::emit_pcb(&self.project.pcb);
+        // Only emit a `(stackup …)` block when the project carries one
+        // distinct from the bare in-memory default — otherwise an
+        // existing M0 fixture without a stackup would round-trip with
+        // a spurious 2-layer-FR4 block injected.
+        let stackup_default = crate::kcir::Stackup::default();
+        let stackup = if self.project.stackup == stackup_default {
+            None
+        } else {
+            Some(&self.project.stackup)
+        };
+        let text = emit::emit_pcb_with_stackup(&self.project.pcb, stackup);
         let target = if let Some(p) = &self.pcb_path {
             p.clone()
         } else {
@@ -305,6 +315,13 @@ fn load_pcb_if_present(
         path: candidate.clone(),
         message,
     })?;
+    // M3-R-01: pull `(setup (stackup ...))` off the .kicad_pcb root
+    // and lift it onto the project-level KCIR field. KiCad stores
+    // the stackup on the board file even though our KCIR model puts
+    // it on `Project` (it's shared with the schematic / fab side).
+    if let Some(stackup) = pcb::map_stackup_from_pcb(root) {
+        kproject.stackup = stackup;
+    }
     Ok(Some(candidate))
 }
 

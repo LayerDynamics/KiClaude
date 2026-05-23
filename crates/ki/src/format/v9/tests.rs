@@ -380,3 +380,126 @@ fn integration_multiple_tracks_vias_zones_resolve_nets() {
     assert_eq!(pcb.zones.len(), 1);
     assert_eq!(pcb.zones[0].net, "GND");
 }
+
+/// M3-R-01 contract: a non-default `Stackup` survives emit → parse with
+/// every per-layer field (`name`, `kind`, `thickness`,
+/// `dielectric_constant`, `loss_tangent`, `material`/`color`) intact,
+/// and the trailing `(copper_finish …)` round-trips into
+/// `Stackup::finish`.
+#[test]
+fn stackup_round_trips_through_emit_and_parse() {
+    use super::pcb::map_stackup_from_pcb;
+    use crate::format::v9::emit::emit_pcb_with_stackup;
+    use crate::kcir::{Layer, Pcb, Stackup, StackupLayer, StackupLayerKind};
+    use crate::sexpr::parse_str;
+
+    let copper = |name: &str| StackupLayer {
+        name: name.to_string(),
+        kind: StackupLayerKind::Copper,
+        thickness_mm: 0.035,
+        dielectric_constant: None,
+        loss_tangent: None,
+        color: "copper".to_string(),
+    };
+    let dielectric = |name: &str, thickness: f64| StackupLayer {
+        name: name.to_string(),
+        kind: StackupLayerKind::Dielectric,
+        thickness_mm: thickness,
+        dielectric_constant: Some(4.5),
+        loss_tangent: Some(0.02),
+        color: "FR4".to_string(),
+    };
+    let original = Stackup {
+        layers: vec![
+            copper("F.Cu"),
+            dielectric("dielectric 1", 0.21),
+            copper("In1.Cu"),
+            dielectric("dielectric 2", 1.10),
+            copper("In2.Cu"),
+            dielectric("dielectric 3", 0.21),
+            copper("B.Cu"),
+        ],
+        power_plane_layers: Vec::new(),
+        controlled_impedance: false,
+        // 0.035 + 0.21 + 0.035 + 1.10 + 0.035 + 0.21 + 0.035 = 1.66.
+        board_thickness_mm: 1.66,
+        finish: "ENIG".to_string(),
+    };
+
+    let pcb = Pcb {
+        version: 20_240_108,
+        generator: "kiclaude".to_string(),
+        thickness_mm: 1.66,
+        paper: "A4".to_string(),
+        layers: vec![
+            Layer {
+                id: 0,
+                name: "F.Cu".to_string(),
+                kind: "signal".to_string(),
+                purpose: String::new(),
+            },
+            Layer {
+                id: 31,
+                name: "B.Cu".to_string(),
+                kind: "signal".to_string(),
+                purpose: String::new(),
+            },
+        ],
+        ..Pcb::default()
+    };
+
+    let text = emit_pcb_with_stackup(&pcb, Some(&original));
+    // Sanity: the stackup landed inside `(setup …)`.
+    assert!(text.contains("(stackup"), "stackup block missing\n{text}");
+    assert!(
+        text.contains("(copper_finish \"ENIG\")"),
+        "copper_finish line missing\n{text}"
+    );
+
+    let nodes = parse_str(&text).expect("re-parse emitted bytes");
+    let root = nodes.first().expect("at least one top-level form");
+    let back = map_stackup_from_pcb(root).expect("stackup re-parses");
+
+    assert_eq!(back.layers.len(), original.layers.len(), "layer count");
+    for (i, (orig, got)) in original.layers.iter().zip(back.layers.iter()).enumerate() {
+        assert_eq!(orig.name, got.name, "layer {i} name");
+        assert_eq!(orig.kind, got.kind, "layer {i} kind");
+        assert_eq!(orig.thickness_mm, got.thickness_mm, "layer {i} thickness");
+        assert_eq!(
+            orig.dielectric_constant, got.dielectric_constant,
+            "layer {i} epsilon_r"
+        );
+        assert_eq!(
+            orig.loss_tangent, got.loss_tangent,
+            "layer {i} loss_tangent"
+        );
+        // Dielectric color is the material name we wrote; copper is the
+        // parser's "copper" default — both round-trip.
+        assert_eq!(orig.color, got.color, "layer {i} color/material");
+    }
+    assert_eq!(back.finish, original.finish, "copper_finish");
+    // Parser sums layer thicknesses into board_thickness_mm.
+    assert!(
+        (back.board_thickness_mm - original.board_thickness_mm).abs() < 1e-9,
+        "board_thickness sums match (got {}, want {})",
+        back.board_thickness_mm,
+        original.board_thickness_mm
+    );
+}
+
+/// M3-R-01 negative: a default `Stackup` (the in-memory placeholder)
+/// must NOT inject a `(stackup …)` block when `save_pcb()` writes. This
+/// protects the M0-Q-02 byte-identity gate against fixtures that never
+/// carried a stackup.
+#[test]
+fn save_pcb_omits_stackup_block_for_default_project() {
+    use super::emit_pcb;
+    use crate::kcir::Pcb;
+
+    let pcb = Pcb::default();
+    let text = emit_pcb(&pcb);
+    assert!(
+        !text.contains("(stackup"),
+        "default emit must not include a stackup block\n{text}"
+    );
+}

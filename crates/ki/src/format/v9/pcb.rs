@@ -26,7 +26,7 @@ use super::sexpr_helpers::{
 };
 use crate::kcir::{
     Drawing, FootprintCourtyard, FootprintInstance, Layer, LayerRef, Model3D, Net, NetClass,
-    NetClassRef, Outline, Pad, Pcb, Track, Via, Zone,
+    NetClassRef, Outline, Pad, Pcb, Stackup, StackupLayer, StackupLayerKind, Track, Via, Zone,
 };
 use crate::sexpr::SNode;
 
@@ -100,6 +100,147 @@ fn map_setup(root: &SNode, pcb: &mut Pcb) {
     }
     if let Some(p) = find_child(setup, "solder_mask_min_width") {
         pcb.solder_mask_min_width_mm = body_children(p).next().and_then(atom_f64).unwrap_or(0.0);
+    }
+}
+
+/// M3-R-01 — pull the `(setup (stackup ...))` block off a parsed
+/// `(kicad_pcb ...)` root and assemble a KCIR [`Stackup`].
+///
+/// Returns `None` when the file has no stackup block (older boards
+/// or pcbnew defaults without controlled-impedance). The KCIR
+/// [`Stackup::default`] (2-layer FR-4) is the right fallback the
+/// caller can use in that case.
+///
+/// ## `KiCad` 9 stackup shape
+///
+/// ```text
+/// (setup
+///   (stackup
+///     (layer "F.Cu"          (type "copper")        (thickness 0.035))
+///     (layer "dielectric 1"  (type "core")          (thickness 1.51)
+///                            (material "FR4")       (epsilon_r 4.5)
+///                            (loss_tangent 0.02))
+///     (layer "B.Cu"          (type "copper")        (thickness 0.035))
+///     (copper_finish "HASL")
+///     (dielectric_constraints no)))
+/// ```
+///
+/// Total board thickness is summed from the layer thicknesses
+/// (`KiCad` doesn't store it as a separate stackup field — the
+/// `(setup)` block's siblings still carry the top-level `(general
+/// (thickness ...))` value which we read elsewhere). `copper_finish`
+/// becomes the `finish` field; missing → empty string.
+#[must_use]
+pub fn map_stackup_from_pcb(root: &SNode) -> Option<Stackup> {
+    let setup = find_child(root, "setup")?;
+    let stackup_node = find_child(setup, "stackup")?;
+    let mut layers: Vec<StackupLayer> = Vec::new();
+    let mut finish = String::new();
+    for child in body_children(stackup_node) {
+        match child.head_symbol() {
+            Some("layer") => {
+                if let Some(layer) = parse_stackup_layer(child) {
+                    layers.push(layer);
+                }
+            }
+            Some("copper_finish") => {
+                if let Some(value) = body_children(child).next().and_then(atom_str) {
+                    finish = value.to_string();
+                }
+            }
+            _ => {}
+        }
+    }
+    let total_thickness: f64 = layers.iter().map(|l| l.thickness_mm).sum();
+    Some(Stackup {
+        layers,
+        power_plane_layers: Vec::new(),
+        controlled_impedance: false,
+        board_thickness_mm: total_thickness,
+        finish,
+    })
+}
+
+fn parse_stackup_layer(node: &SNode) -> Option<StackupLayer> {
+    // First body child is the layer name as a quoted string.
+    let mut body = body_children(node);
+    let name_node = body.next()?;
+    let name = atom_str(name_node)?.to_string();
+    let mut thickness_mm = 0.0;
+    let mut dielectric_constant: Option<f64> = None;
+    let mut loss_tangent: Option<f64> = None;
+    let mut kind = StackupLayerKind::Copper;
+    let mut color = String::new();
+    for child in body {
+        match child.head_symbol() {
+            Some("type") => {
+                let raw = body_children(child).next().and_then(atom_str).unwrap_or("");
+                kind = stackup_kind_from_kicad(raw);
+                // KiCad's `(type "FR4 core")` doubles as the material
+                // name for the renderer — surface it as `color` so the
+                // UI has something to display.
+                if matches!(kind, StackupLayerKind::Dielectric) {
+                    color = raw.to_string();
+                }
+            }
+            Some("thickness") => {
+                thickness_mm = body_children(child)
+                    .next()
+                    .and_then(atom_f64)
+                    .unwrap_or(0.0);
+            }
+            // KiCad writes `(material "FR4")` for dielectrics and (less
+            // commonly) `(color "F8D3A1")` for renderer-overridden
+            // copper. Both populate the same KCIR `color` slot — keep
+            // them in one arm so clippy doesn't flag duplicate bodies.
+            Some("material" | "color") => {
+                if let Some(value) = body_children(child).next().and_then(atom_str) {
+                    color = value.to_string();
+                }
+            }
+            Some("epsilon_r") => {
+                dielectric_constant = body_children(child).next().and_then(atom_f64);
+            }
+            Some("loss_tangent") => {
+                loss_tangent = body_children(child).next().and_then(atom_f64);
+            }
+            _ => {}
+        }
+    }
+    // Copper layers don't carry epsilon_r in KiCad's shape — leave
+    // `None`. Bare `"FR4"` color string survives for the renderer.
+    if matches!(kind, StackupLayerKind::Copper) && color.is_empty() {
+        color = "copper".to_string();
+    }
+    Some(StackupLayer {
+        name,
+        kind,
+        thickness_mm,
+        dielectric_constant,
+        loss_tangent,
+        color,
+    })
+}
+
+fn stackup_kind_from_kicad(raw: &str) -> StackupLayerKind {
+    // KiCad's `(type ...)` values: "copper", "core", "prepreg",
+    // "Top Solder Mask", "Bottom Solder Mask", "Top Silk Screen",
+    // "Bottom Silk Screen", "Top Paste", "Bottom Paste", "Adhes",
+    // … Map them to the KCIR enum by case-insensitive containment.
+    let lc = raw.to_lowercase();
+    if lc.contains("copper") {
+        StackupLayerKind::Copper
+    } else if lc.contains("mask") {
+        StackupLayerKind::Soldermask
+    } else if lc.contains("silk") {
+        StackupLayerKind::Silkscreen
+    } else if lc.contains("paste") {
+        StackupLayerKind::Paste
+    } else if lc.contains("adhes") {
+        StackupLayerKind::Adhesive
+    } else {
+        // "core", "prepreg", "fr4" — all dielectric variants.
+        StackupLayerKind::Dielectric
     }
 }
 

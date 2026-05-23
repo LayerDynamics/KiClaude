@@ -51,12 +51,29 @@ use std::fmt::Write as _;
 
 use crate::kcir::{
     Drawing, FootprintCourtyard, FootprintInstance, Layer, Model3D, Net, NetClass, Outline, Pad,
-    Pcb, Track, Via, Zone,
+    Pcb, Stackup, StackupLayer, StackupLayerKind, Track, Via, Zone,
 };
 
 /// Emit a [`Pcb`] as canonical `.kicad_pcb` text.
+///
+/// Delegates to [`emit_pcb_with_stackup`] with no stackup — preserves the
+/// pre-M3 emit shape for callers (golden fixtures, python/wasm bindings)
+/// that emit a board without project-level stackup metadata.
 #[must_use]
 pub fn emit_pcb(pcb: &Pcb) -> String {
+    emit_pcb_with_stackup(pcb, None)
+}
+
+/// Emit a [`Pcb`] with an optional project-level [`Stackup`].
+///
+/// When `stackup` is `Some`, a `(stackup …)` form is written inside the
+/// `(setup …)` block — the shape `KiCad` 9 expects, per M3-R-01. The
+/// emitted layer-type strings (`"copper"`, `"core"`, `"solder_mask"`, …) are
+/// chosen so the companion parser
+/// [`super::pcb::map_stackup_from_pcb`] reads back identical
+/// [`StackupLayerKind`] values.
+#[must_use]
+pub fn emit_pcb_with_stackup(pcb: &Pcb, stackup: Option<&Stackup>) -> String {
     let mut out = String::new();
     let version = if pcb.version == 0 {
         20_240_108
@@ -100,7 +117,7 @@ pub fn emit_pcb(pcb: &Pcb) -> String {
     out.push('\n');
 
     // `(setup …)`
-    emit_setup(pcb, &mut out);
+    emit_setup(pcb, stackup, &mut out);
     out.push('\n');
 
     // `(net_class …)` blocks.
@@ -183,8 +200,11 @@ fn emit_layers(layers: &[Layer], out: &mut String) {
     out.push_str("  )\n");
 }
 
-fn emit_setup(pcb: &Pcb, out: &mut String) {
+fn emit_setup(pcb: &Pcb, stackup: Option<&Stackup>, out: &mut String) {
     out.push_str("  (setup\n");
+    if let Some(s) = stackup {
+        emit_stackup(s, out);
+    }
     writeln!(
         out,
         "    (pad_to_mask_clearance {})",
@@ -200,6 +220,66 @@ fn emit_setup(pcb: &Pcb, out: &mut String) {
         .expect("write");
     }
     out.push_str("  )\n");
+}
+
+/// Emit the `(stackup …)` form inside `(setup …)`.
+///
+/// Shape mirrors `KiCad 9`'s stack manager output: one `(layer …)` per
+/// physical layer in top-down order, then an optional
+/// `(copper_finish "…")` trailing line. The `(type …)` tokens we write
+/// are chosen so the case-insensitive matcher in
+/// `super::pcb::stackup_kind_from_kicad` reads them back to the same
+/// [`StackupLayerKind`] value — that's the round-trip contract M3-R-01
+/// adds to the M0 byte-identity gate.
+fn emit_stackup(stackup: &Stackup, out: &mut String) {
+    out.push_str("    (stackup\n");
+    for layer in &stackup.layers {
+        emit_stackup_layer(layer, out);
+    }
+    if !stackup.finish.is_empty() {
+        writeln!(out, "      (copper_finish {})", quote(&stackup.finish)).expect("write");
+    }
+    out.push_str("    )\n");
+}
+
+fn emit_stackup_layer(layer: &StackupLayer, out: &mut String) {
+    write!(
+        out,
+        "      (layer {} (type {})",
+        quote(&layer.name),
+        quote(kicad_type_for_kind(layer.kind))
+    )
+    .expect("write");
+    if layer.thickness_mm != 0.0 {
+        write!(out, " (thickness {})", format_float(layer.thickness_mm)).expect("write");
+    }
+    // Dielectric layers carry the material name (re-emitted as
+    // `(material "FR4")`) and electrical constants. Copper layers in
+    // KiCad's stack manager don't carry epsilon_r / loss_tangent.
+    if matches!(layer.kind, StackupLayerKind::Dielectric) && !layer.color.is_empty() {
+        write!(out, " (material {})", quote(&layer.color)).expect("write");
+    }
+    if let Some(er) = layer.dielectric_constant {
+        write!(out, " (epsilon_r {})", format_float(er)).expect("write");
+    }
+    if let Some(tan) = layer.loss_tangent {
+        write!(out, " (loss_tangent {})", format_float(tan)).expect("write");
+    }
+    out.push_str(")\n");
+}
+
+fn kicad_type_for_kind(kind: StackupLayerKind) -> &'static str {
+    // Choose canonical strings the parser's containment matcher reads
+    // back to the same enum variant (see
+    // `super::pcb::stackup_kind_from_kicad`).
+    match kind {
+        StackupLayerKind::Copper => "copper",
+        StackupLayerKind::Dielectric => "core",
+        StackupLayerKind::Soldermask => "solder_mask",
+        StackupLayerKind::Silkscreen => "silkscreen",
+        StackupLayerKind::Paste => "solder_paste",
+        StackupLayerKind::Adhesive => "adhesive",
+    }
 }
 
 fn emit_net_class(nc: &NetClass, out: &mut String) {
