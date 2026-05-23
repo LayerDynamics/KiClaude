@@ -21,11 +21,19 @@ import { kiserverOrigin } from "../proxy.js";
  * `services/mcp/src/kc_mcp/ui_tools/__init__.py`) is the only step
  * required to expose a new UI-only mutation. */
 export const ALLOWED_UI_TOOLS = [
+  // M1-P-05 schematic UI tools.
   "ui_symbol_place_xy",
   "ui_wire_draw_points",
   "ui_label_place_xy",
   "ui_junction_place_xy",
   "ui_symbol_edit_props",
+  // M2-P-05 PCB UI tools — added when the PCB editor tools
+  // (M2-T-02..T-09) started calling them through the gateway.
+  "ui_footprint_place_xy",
+  "ui_footprint_move",
+  "ui_track_draw_points",
+  "ui_via_place_xy",
+  "ui_zone_create_polygon",
 ] as const;
 export type AllowedUiTool = (typeof ALLOWED_UI_TOOLS)[number];
 

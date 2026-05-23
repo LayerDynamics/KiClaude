@@ -93,13 +93,20 @@ describe("/api/ui/<tool>/<project_id>", () => {
     expect(res.status).toBe(400);
   });
 
-  it("exposes the expected five tools on the allowlist", () => {
+  it("exposes the expected schematic (5) + PCB (5) UI tools on the allowlist", () => {
     expect([...ALLOWED_UI_TOOLS].sort()).toEqual([
+      // M1-P-05 schematic UI tools.
       "ui_junction_place_xy",
       "ui_label_place_xy",
       "ui_symbol_edit_props",
       "ui_symbol_place_xy",
       "ui_wire_draw_points",
-    ]);
+      // M2-P-05 PCB UI tools — added by M2-T-02..T-09.
+      "ui_footprint_move",
+      "ui_footprint_place_xy",
+      "ui_track_draw_points",
+      "ui_via_place_xy",
+      "ui_zone_create_polygon",
+    ].sort());
   });
 });
