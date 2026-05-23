@@ -51,13 +51,14 @@ tests/golden/zones/*_filled.kicad_pro
 **/.cache/
 **/library.db
 
-# External reference checkouts under development/resources/kicad/ —
-# these are clone-for-documentation repos (kicad-library, kicad-python,
-# kicanvas, freerouting, KiKit, PcbDraw, tscircuit, etc.) with their
-# own .git histories. They are NOT part of this project's source and
-# would either pollute the tree (if vendored) or have to be tracked
-# as submodules (which we deliberately aren't doing at M2). Ignore.
-development/resources/kicad/*/
+# External reference checkouts under development/resources/ — these
+# are clone-for-documentation repos (KiCad libraries, Anthropic SDK
+# samples, kicanvas, freerouting, etc.) with their own .git
+# histories. They are NOT part of this project's source and would
+# either pollute the tree (if vendored) or have to be tracked as
+# submodules (which we deliberately aren't doing at M2). Ignore
+# every nested directory under development/resources/<vendor>/.
+development/resources/*/*/
 
 # OS junk
 .DS_Store
