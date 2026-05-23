@@ -5,14 +5,16 @@ Endpoints (M0-P-02):
 - `GET /health` → `{ok: true, service: "agent", version: <semver>}`.
 - `POST /echo` body `{prompt}` → runs the prompt through
   [`claude_agent_sdk.query()`][claude_agent_sdk.query] and returns the
-  collected assistant text. Requires `ANTHROPIC_API_KEY` in the env;
-  returns 503 otherwise. M0-P-06 will replace this with a full
-  ClaudeSDKClient session that wires in kc_mcp + hooks.
+  collected assistant text. Requires SOME form of Claude credential
+  reachable — `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
+  `CLAUDE_CODE_OAUTH_TOKEN`, Bedrock/Vertex opt-in, OR a keychain
+  credential from `claude login`. See [`agent.auth.is_available`][]
+  for the full probe. Returns 503 listing every accepted path
+  otherwise.
 """
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import structlog
@@ -20,7 +22,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from agent import __version__
+from agent import __version__, auth
 
 log = structlog.get_logger(__name__)
 
@@ -54,10 +56,11 @@ async def echo(req: EchoRequest) -> JSONResponse:
     returns it as `{ok, reply, project_id}`. Mirrors the contract that
     M0-Q-03's Playwright smoke uses to verify chat reaches the model.
     """
-    if not os.environ.get("ANTHROPIC_API_KEY"):
+    auth_result = auth.is_available()
+    if not auth_result.ok:
         raise HTTPException(
             status_code=503,
-            detail="ANTHROPIC_API_KEY not set; /echo is disabled.",
+            detail=auth.describe_unavailable(),
         )
 
     # Imported lazily so the rest of the app boots even without the
@@ -83,8 +86,24 @@ async def echo(req: EchoRequest) -> JSONResponse:
             "ok": True,
             "reply": reply,
             "project_id": req.project_id,
+            "auth_source": auth_result.source,
         }
     )
+
+
+@app.get("/auth/status")
+async def auth_status() -> dict[str, Any]:
+    """Diagnostic — surface which auth path (if any) the service
+    will use when `/echo` runs. Reports source + human-readable
+    detail. Useful for the M2-Q-02 e2e setup, which can decide
+    whether to start the agent at all based on this probe."""
+    auth.reset_cache()
+    result = auth.is_available()
+    return {
+        "ok": result.ok,
+        "source": result.source,
+        "detail": result.detail,
+    }
 
 
 __all__ = ["app"]

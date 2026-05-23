@@ -117,11 +117,22 @@ test.describe("M0-Q-03 smoke", () => {
   });
 
   // Backend-driven assertion. Skipped unless the full local stack is
-  // running and an API key is configured.
+  // running AND some accepted auth path is reachable — either an
+  // env credential or a `claude login` keychain entry probed via
+  // `/api/agent/auth/status` (see `auth_gate.ts`).
   const fullStack = process.env.E2E_FULL_STACK === "1";
-  const hasApiKey = !!process.env.ANTHROPIC_API_KEY;
   test.describe("[full-stack only]", () => {
-    test.skip(!fullStack || !hasApiKey, "needs E2E_FULL_STACK=1 + ANTHROPIC_API_KEY");
+    test.beforeAll(async ({}, testInfo) => {
+      if (!fullStack) {
+        testInfo.skip(true, "needs E2E_FULL_STACK=1");
+        return;
+      }
+      const { probeAuth } = await import("./auth_gate");
+      const auth = await probeAuth({ fullStack });
+      if (!auth.ok) {
+        testInfo.skip(true, auth.reason);
+      }
+    });
 
     test("Claude calls kc_ping and replies in <5s", async ({ page }) => {
       await page.goto("/");

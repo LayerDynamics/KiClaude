@@ -5,6 +5,8 @@ import { join } from "node:path";
 
 import { expect, test } from "@playwright/test";
 
+import { probeAuth } from "./auth_gate";
+
 /**
  * M2-Q-02 — chat-driven PCB flow on `examples/blinky`.
  *
@@ -13,8 +15,11 @@ import { expect, test } from "@playwright/test";
  * `/pcb-fab jlcpcb` → produces a gerber zip whose contents match a
  * recorded golden manifest."
  *
- * Gates (same pattern as `m1.spec.ts`):
- *   - `ANTHROPIC_API_KEY` is set so the agent service can run.
+ * Gates:
+ *   - Any accepted auth path is available — env (`ANTHROPIC_API_KEY`,
+ *     `CLAUDE_CODE_OAUTH_TOKEN`, etc.) OR a `claude login` keychain
+ *     credential. The {@link probeAuth} helper hits the agent's
+ *     `/auth/status` endpoint to verify keychain-only setups.
  *   - `E2E_FULL_STACK=1` opt-in (services/server, services/agent,
  *     services/mcp, services/kiserver, services/kiconnector all up).
  *     The Playwright `webServer` config only starts the client dev
@@ -30,7 +35,6 @@ import { expect, test } from "@playwright/test";
  * message rather than failing — matching the M1 pattern.
  */
 
-const HAS_KEY = !!process.env.ANTHROPIC_API_KEY;
 const FULL_STACK = process.env.E2E_FULL_STACK === "1";
 const REPO_ROOT = (() => {
   try {
@@ -96,11 +100,7 @@ function bundleManifest(outputDir: string, target: string): BundleManifest {
 }
 
 test.describe("M2-Q-02 blinky chat-driven flow", () => {
-  test.beforeEach(({}, testInfo) => {
-    if (!HAS_KEY) {
-      testInfo.skip(true, "ANTHROPIC_API_KEY not set");
-      return;
-    }
+  test.beforeEach(async ({}, testInfo) => {
     if (!FULL_STACK) {
       testInfo.skip(
         true,
@@ -118,6 +118,14 @@ test.describe("M2-Q-02 blinky chat-driven flow", () => {
         true,
         `examples/blinky is not clean; commit or stash first:\n${dirty}`,
       );
+      return;
+    }
+    // Probe auth via the agent service so the test runs for any
+    // accepted credential — env API key, OAuth token, or keychain
+    // from `claude login`.
+    const auth = await probeAuth({ fullStack: FULL_STACK });
+    if (!auth.ok) {
+      testInfo.skip(true, auth.reason);
     }
   });
 

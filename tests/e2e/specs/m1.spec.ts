@@ -5,6 +5,8 @@ import { join } from "node:path";
 
 import { expect, test } from "@playwright/test";
 
+import { probeAuth } from "./auth_gate";
+
 /**
  * M1-Q-03 — `/add-mcu esp32-s3` end-to-end with git diff.
  *
@@ -15,7 +17,10 @@ import { expect, test } from "@playwright/test";
  * matches the golden patch."
  *
  * The test requires:
- *   - `ANTHROPIC_API_KEY` to authorize the agent service.
+ *   - Any accepted Claude auth path — env (`ANTHROPIC_API_KEY`,
+ *     `CLAUDE_CODE_OAUTH_TOKEN`, etc.) OR a `claude login` keychain
+ *     credential. The {@link probeAuth} helper probes the agent's
+ *     `/auth/status` endpoint for keychain-only setups.
  *   - `E2E_FULL_STACK=1` opt-in (the full chain — services/server,
  *     services/agent, services/mcp, services/kiserver — must already
  *     be running). The Playwright `webServer` block only starts the
@@ -28,7 +33,6 @@ import { expect, test } from "@playwright/test";
  * by a Claude Code session", not "always-on CI".
  */
 
-const HAS_KEY = !!process.env.ANTHROPIC_API_KEY;
 const FULL_STACK = process.env.E2E_FULL_STACK === "1";
 const REPO_ROOT = (() => {
   try {
@@ -66,11 +70,7 @@ function snapshotProjectBytes(): Record<string, Buffer> {
 }
 
 test.describe("M1-Q-03 /add-mcu e2e", () => {
-  test.beforeEach(({}, testInfo) => {
-    if (!HAS_KEY) {
-      testInfo.skip(true, "ANTHROPIC_API_KEY not set");
-      return;
-    }
+  test.beforeEach(async ({}, testInfo) => {
     if (!FULL_STACK) {
       testInfo.skip(
         true,
@@ -88,6 +88,11 @@ test.describe("M1-Q-03 /add-mcu e2e", () => {
         true,
         `examples/esp32_s3_blinky is not clean; commit or stash first:\n${dirty}`,
       );
+      return;
+    }
+    const auth = await probeAuth({ fullStack: FULL_STACK });
+    if (!auth.ok) {
+      testInfo.skip(true, auth.reason);
     }
   });
 
