@@ -1,0 +1,36 @@
+(kicad_pcb (version 20240108) (generator kiclaude)
+  (general (thickness 1.6))
+  (paper "A4")
+  (layers
+    (0 "F.Cu" signal)
+    (31 "B.Cu" signal)
+    (44 "Edge.Cuts" user)
+  )
+  (setup (pad_to_mask_clearance 0.0))
+
+  (net 0 "")
+  (net 1 "GND")
+  (net 2 "VCC")
+
+  (footprint "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical"
+    (layer "F.Cu")
+    (uuid "22222222-2222-2222-2222-222222220001")
+    (at 25.0 25.0 0.0)
+    (property "Reference" "J1")
+    (property "Value" "Conn")
+    (pad "1" thru_hole circle (at -1.27 0.0) (size 1.7 1.7) (drill 1.0) (layers "*.Cu" "*.Mask") (net 1 "GND") (uuid "bbbb0001-0000-0000-0000-000000000001"))
+    (pad "2" thru_hole circle (at 1.27 0.0) (size 1.7 1.7) (drill 1.0) (layers "*.Cu" "*.Mask") (net 2 "VCC") (uuid "bbbb0001-0000-0000-0000-000000000002"))
+  )
+
+  (gr_line (start 0.0 0.0) (end 50.0 0.0) (stroke (width 0.05) (type default)) (layer "Edge.Cuts") (uuid "edgeth-0000-0000-0000-000000000001"))
+  (gr_line (start 50.0 0.0) (end 50.0 50.0) (stroke (width 0.05) (type default)) (layer "Edge.Cuts") (uuid "edgeth-0000-0000-0000-000000000002"))
+  (gr_line (start 50.0 50.0) (end 0.0 50.0) (stroke (width 0.05) (type default)) (layer "Edge.Cuts") (uuid "edgeth-0000-0000-0000-000000000003"))
+  (gr_line (start 0.0 50.0) (end 0.0 0.0) (stroke (width 0.05) (type default)) (layer "Edge.Cuts") (uuid "edgeth-0000-0000-0000-000000000004"))
+
+  (zone (net 1) (net_name "GND") (layer "F.Cu") (uuid "z0000002-0000-0000-0000-000000000001")
+    (connect_pads (clearance 0.5))
+    (min_thickness 0.25)
+    (fill (thermal_gap 0.5) (thermal_bridge_width 0.5))
+    (polygon (pts (xy 5.0 5.0) (xy 45.0 5.0) (xy 45.0 45.0) (xy 5.0 45.0)))
+  )
+)

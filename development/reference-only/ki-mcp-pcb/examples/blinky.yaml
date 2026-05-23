@@ -1,0 +1,28 @@
+# Minimal CIR example — the M0 smoke test for the validator.
+#
+# This is a 2-layer board with one MCU and one decoupling cap. It validates
+# clean through `kimp validate examples/blinky.yaml`. The M1 demo target
+# lives in `examples/esp32_s3_blinky.ato` once .ato parsing is wired in.
+cir_version: "0.1"
+name: blinky-min
+description: "Smallest possible CIR — validates clean."
+
+components:
+  - refdes: U1
+    mpn: ESP32-S3-WROOM-1
+    value: ESP32-S3
+  - refdes: C1
+    mpn: GRM188R71C104KA01D
+    value: 100nF
+
+nets:
+  - name: GND
+    net_class: ground
+    members: ["U1.1", "C1.2"]
+  - name: "3V3"
+    net_class: power
+    members: ["U1.2", "C1.1"]
+
+fab:
+  name: jlcpcb
+  layer_count: 2

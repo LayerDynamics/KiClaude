@@ -1,0 +1,31 @@
+{
+  "name": "@kiclaude/cli",
+  "version": "0.1.0",
+  "description": "kiclaude CLI — `kiclaude --version`, `kiclaude mcp stdio`.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "kiclaude": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "citty": "^0.1.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

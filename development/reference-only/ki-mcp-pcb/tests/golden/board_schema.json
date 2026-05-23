@@ -1,0 +1,805 @@
+{
+  "$defs": {
+    "BOMPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "distributors": {
+          "items": {
+            "enum": [
+              "digikey",
+              "mouser",
+              "jlc",
+              "lcsc",
+              "octopart"
+            ],
+            "type": "string"
+          },
+          "title": "Distributors",
+          "type": "array"
+        },
+        "max_unit_price_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Unit Price Usd"
+        },
+        "prefer_basic_parts": {
+          "default": true,
+          "description": "JLC 'basic' parts avoid the assembly fee.",
+          "title": "Prefer Basic Parts",
+          "type": "boolean"
+        },
+        "require_in_stock": {
+          "default": true,
+          "title": "Require In Stock",
+          "type": "boolean"
+        }
+      },
+      "title": "BOMPolicy",
+      "type": "object"
+    },
+    "Component": {
+      "additionalProperties": false,
+      "description": "A placed (or to-be-placed) electrical component.",
+      "properties": {
+        "attrs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Attrs",
+          "type": "object"
+        },
+        "bga_pitch_mm": {
+          "anyOf": [
+            {
+              "description": "Distance in millimeters.",
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Ball pitch in mm for BGA / LGA packages (typically 0.4 / 0.5 / 0.65 / 0.8 / 1.0). CIR110 looks up the fanout template for the declared pitch and warns if the current fab target can't escape-route it.",
+          "title": "Bga Pitch Mm"
+        },
+        "decoupling_pins": {
+          "description": "Supply pin numbers that require nearby decoupling. Used by the M2 decoupling-coverage validator (CIR030).",
+          "items": {
+            "type": "string"
+          },
+          "title": "Decoupling Pins",
+          "type": "array"
+        },
+        "footprint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "KiCad footprint identifier 'Library:Name'. If None, the synthesizer resolves it from MPN.",
+          "title": "Footprint"
+        },
+        "is_bridge": {
+          "default": false,
+          "description": "Marks a component as a partition bridge (ferrite bead, opto-isolator, capacitor coupling). Bridges may legally connect different partitions.",
+          "title": "Is Bridge",
+          "type": "boolean"
+        },
+        "mpn": {
+          "description": "Manufacturer part number \u2014 must resolve at synthesis time.",
+          "title": "Mpn",
+          "type": "string"
+        },
+        "partition": {
+          "anyOf": [
+            {
+              "enum": [
+                "analog",
+                "digital",
+                "rf",
+                "power",
+                "isolated"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Mixed-signal partition this component belongs to. Validators (CIR050) enforce no signal nets cross partitions except via declared bridge components.",
+          "title": "Partition"
+        },
+        "placement_hint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Declarative natural-language placement hint, e.g. 'south edge, centered'. Never raw coordinates from an LLM.",
+          "title": "Placement Hint"
+        },
+        "refdes": {
+          "description": "Reference designator (e.g. 'R1', 'U2', 'C42').",
+          "pattern": "^[A-Z]+[0-9]+$",
+          "title": "Refdes",
+          "type": "string"
+        },
+        "symbol": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "KiCad symbol identifier 'Library:Name'. If None, resolved from MPN.",
+          "title": "Symbol"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "refdes",
+        "mpn"
+      ],
+      "title": "Component",
+      "type": "object"
+    },
+    "Constraint": {
+      "additionalProperties": false,
+      "description": "A design-intent constraint that the validator will enforce.",
+      "properties": {
+        "kind": {
+          "enum": [
+            "max_length",
+            "min_length",
+            "length_match",
+            "min_separation",
+            "max_stub",
+            "decoupling_within_mm",
+            "keep_out",
+            "controlled_impedance"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "targets": {
+          "description": "Net names, net classes, or refdes the constraint applies to.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Targets",
+          "type": "array"
+        },
+        "tolerance_pct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tolerance Pct"
+        },
+        "value_mm": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value Mm"
+        },
+        "value_ohm": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value Ohm"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "Constraint",
+      "type": "object"
+    },
+    "FabTarget": {
+      "additionalProperties": false,
+      "description": "Target fabrication house + its DFM constraints.",
+      "properties": {
+        "layer_count": {
+          "default": 2,
+          "maximum": 16,
+          "minimum": 2,
+          "title": "Layer Count",
+          "type": "integer"
+        },
+        "min_annular_ring_mm": {
+          "default": 0.13,
+          "description": "Distance in millimeters.",
+          "minimum": 0,
+          "title": "Min Annular Ring Mm",
+          "type": "number"
+        },
+        "min_drill_mm": {
+          "default": 0.2,
+          "description": "Distance in millimeters.",
+          "minimum": 0,
+          "title": "Min Drill Mm",
+          "type": "number"
+        },
+        "min_space_mm": {
+          "default": 0.127,
+          "description": "Distance in millimeters.",
+          "minimum": 0,
+          "title": "Min Space Mm",
+          "type": "number"
+        },
+        "min_trace_mm": {
+          "default": 0.127,
+          "description": "Distance in millimeters.",
+          "minimum": 0,
+          "title": "Min Trace Mm",
+          "type": "number"
+        },
+        "name": {
+          "default": "jlcpcb",
+          "enum": [
+            "jlcpcb",
+            "oshpark",
+            "pcbway",
+            "generic"
+          ],
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "title": "FabTarget",
+      "type": "object"
+    },
+    "Layer": {
+      "additionalProperties": false,
+      "description": "A single copper or dielectric layer.",
+      "properties": {
+        "er": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Relative permittivity for dielectric layers.",
+          "title": "Er"
+        },
+        "kind": {
+          "enum": [
+            "copper",
+            "dielectric",
+            "soldermask",
+            "silkscreen",
+            "paste"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "material": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Material"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "thickness_mm": {
+          "default": 0.035,
+          "description": "Distance in millimeters.",
+          "minimum": 0,
+          "title": "Thickness Mm",
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "kind"
+      ],
+      "title": "Layer",
+      "type": "object"
+    },
+    "Net": {
+      "additionalProperties": false,
+      "description": "A named electrical net.",
+      "properties": {
+        "cpwg_gap_mm": {
+          "anyOf": [
+            {
+              "description": "Distance in millimeters.",
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Trace-to-side-ground gap for grounded coplanar waveguide (CPWG) RF nets. CIR070 calls the CPWG solver when this is set instead of the microstrip approximation.",
+          "title": "Cpwg Gap Mm"
+        },
+        "cross_partition_ok": {
+          "default": false,
+          "description": "Marks a partition crossing as intentional (e.g. an I2S or SPI bus that legitimately bridges digital \u2194 analog ICs). Set this only when the crossing has been reviewed.",
+          "title": "Cross Partition Ok",
+          "type": "boolean"
+        },
+        "diff_pair_with": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Name of the other net in this differential pair. CIR060 validates that the named net exists, points back at us, and shares a length-match group. USB D+/D\u2212, Ethernet TX\u00b1/RX\u00b1.",
+          "title": "Diff Pair With"
+        },
+        "fly_by_order": {
+          "description": "Ordered list of refdes for fly-by topology \u2014 first entry is the controller, last entry is the terminator. CIR100 enforces the order and structure.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fly By Order",
+          "type": "array"
+        },
+        "length_match_group": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Length Match Group"
+        },
+        "members": {
+          "description": "List of 'REFDES.PIN' strings (e.g. 'U1.3', 'R5.2').",
+          "items": {
+            "type": "string"
+          },
+          "title": "Members",
+          "type": "array"
+        },
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "net_class": {
+          "default": "signal",
+          "enum": [
+            "signal",
+            "power",
+            "ground",
+            "high_speed",
+            "differential",
+            "rf",
+            "analog"
+          ],
+          "title": "Net Class",
+          "type": "string"
+        },
+        "partition": {
+          "anyOf": [
+            {
+              "enum": [
+                "analog",
+                "digital",
+                "rf",
+                "power",
+                "isolated"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Mixed-signal partition this net belongs to. CIR050 enforces signal nets stay within a partition.",
+          "title": "Partition"
+        },
+        "power_rail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Which power rail this net belongs to (e.g. '3V3', 'VBUS'). Used by the decoupling-coverage validator to match supply pins.",
+          "title": "Power Rail"
+        },
+        "reference_plane": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Stackup layer name (e.g. 'In1.Cu') that this net's return current should travel on. CIR090 checks the plane exists in the stackup and is contiguous (not split under the trace).",
+          "title": "Reference Plane"
+        },
+        "target_impedance_ohm": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Impedance Ohm"
+        },
+        "topology": {
+          "anyOf": [
+            {
+              "enum": [
+                "point_to_point",
+                "fly_by",
+                "t_branch",
+                "star"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Routing topology hint. DDR3/4 address+command nets are typically 'fly_by' (controller \u2192 ram_0 \u2192 ram_1 \u2192 \u2026 \u2192 terminator).",
+          "title": "Topology"
+        },
+        "trace_spacing_mm": {
+          "anyOf": [
+            {
+              "description": "Distance in millimeters.",
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Per-net edge-to-edge spacing for differential pairs. Only used when ``diff_pair_with`` is also set.",
+          "title": "Trace Spacing Mm"
+        },
+        "trace_width_mm": {
+          "anyOf": [
+            {
+              "description": "Distance in millimeters.",
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Per-net trace width override. Used by the impedance solver (CIR070) when set; otherwise a conservative default is applied. Diff pairs and controlled-impedance nets typically need this set explicitly.",
+          "title": "Trace Width Mm"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Net",
+      "type": "object"
+    },
+    "Outline": {
+      "additionalProperties": false,
+      "description": "Board outline. ``auto`` lets the placement step infer a rectangle.",
+      "properties": {
+        "corner_radius_mm": {
+          "default": 0.0,
+          "description": "Distance in millimeters.",
+          "minimum": 0,
+          "title": "Corner Radius Mm",
+          "type": "number"
+        },
+        "height_mm": {
+          "anyOf": [
+            {
+              "description": "Distance in millimeters.",
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Height Mm"
+        },
+        "polygon_mm": {
+          "anyOf": [
+            {
+              "items": {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Polygon Mm"
+        },
+        "shape": {
+          "default": "auto",
+          "enum": [
+            "auto",
+            "rect",
+            "polygon"
+          ],
+          "title": "Shape",
+          "type": "string"
+        },
+        "width_mm": {
+          "anyOf": [
+            {
+              "description": "Distance in millimeters.",
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Width Mm"
+        }
+      },
+      "title": "Outline",
+      "type": "object"
+    },
+    "Signoff": {
+      "additionalProperties": false,
+      "description": "Co-pilot acknowledgment for high-stakes M4 features.\n\nWhen set ``True``, suppresses the \"needs human review\" warnings the\nM4 validators emit. This is the audit trail: an LLM cannot flip these\nflags on its own \u2014 a human must commit the change.",
+      "properties": {
+        "bga_fanout_reviewed": {
+          "default": false,
+          "description": "BGA escape routing reviewed",
+          "title": "Bga Fanout Reviewed",
+          "type": "boolean"
+        },
+        "ddr_reviewed": {
+          "default": false,
+          "description": "DDR fly-by topology + length tuning reviewed",
+          "title": "Ddr Reviewed",
+          "type": "boolean"
+        },
+        "reviewed_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISO 8601 date the review was completed",
+          "title": "Reviewed At"
+        },
+        "reviewer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Name/handle of the human reviewer",
+          "title": "Reviewer"
+        },
+        "rf_reviewed": {
+          "default": false,
+          "description": "RF traces / antennas have been reviewed by a human EE",
+          "title": "Rf Reviewed",
+          "type": "boolean"
+        }
+      },
+      "title": "Signoff",
+      "type": "object"
+    },
+    "Stackup": {
+      "additionalProperties": false,
+      "description": "PCB layer stackup.\n\nFor M1 the default was 2-layer FR-4. M2 introduces 4-layer with\npower planes via ``default_4layer_fr4``. M3+ adds controlled-impedance\nhints for high-speed work.",
+      "properties": {
+        "controlled_impedance": {
+          "default": false,
+          "title": "Controlled Impedance",
+          "type": "boolean"
+        },
+        "finished_thickness_mm": {
+          "default": 1.6,
+          "description": "Distance in millimeters.",
+          "minimum": 0,
+          "title": "Finished Thickness Mm",
+          "type": "number"
+        },
+        "layers": {
+          "items": {
+            "$ref": "#/$defs/Layer"
+          },
+          "title": "Layers",
+          "type": "array"
+        },
+        "power_plane_layers": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Power Plane Layers",
+          "type": "array"
+        }
+      },
+      "required": [
+        "layers"
+      ],
+      "title": "Stackup",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The top-level CIR document \u2014 one board per file.",
+  "properties": {
+    "bom_policy": {
+      "$ref": "#/$defs/BOMPolicy"
+    },
+    "cir_version": {
+      "default": "0.4",
+      "title": "Cir Version",
+      "type": "string"
+    },
+    "components": {
+      "items": {
+        "$ref": "#/$defs/Component"
+      },
+      "title": "Components",
+      "type": "array"
+    },
+    "constraints": {
+      "items": {
+        "$ref": "#/$defs/Constraint"
+      },
+      "title": "Constraints",
+      "type": "array"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Description"
+    },
+    "fab": {
+      "$ref": "#/$defs/FabTarget"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "nets": {
+      "items": {
+        "$ref": "#/$defs/Net"
+      },
+      "title": "Nets",
+      "type": "array"
+    },
+    "outline": {
+      "$ref": "#/$defs/Outline"
+    },
+    "signoff": {
+      "$ref": "#/$defs/Signoff"
+    },
+    "stackup": {
+      "$ref": "#/$defs/Stackup"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "title": "Board",
+  "type": "object"
+}

@@ -1,0 +1,54 @@
+name: kcir-schema
+
+# M1-Q-02 — KCIR schema-bump CI gate.
+#
+# Refuses any PR that modifies crates/ki/src/kcir/** without:
+#   1. Bumping KCIR_VERSION in crates/ki/src/lib.rs above the base ref.
+#   2. Adding a new migration file under crates/ki/src/kcir/migrations/
+#      AND a matching `Migration { to_version: "..." }` entry in
+#      crates/ki/src/kcir/migrations/mod.rs.
+#
+# Spec ref: SPEC-01 §13 gate #6; plan ref: M1-Q-02.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'crates/ki/src/kcir/**'
+      - 'crates/ki/src/lib.rs'
+      - 'scripts/kcir_schema_check.py'
+      - '.github/workflows/kcir-schema.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'crates/ki/src/kcir/**'
+      - 'crates/ki/src/lib.rs'
+      - 'scripts/kcir_schema_check.py'
+
+jobs:
+  kcir-schema-gate:
+    name: KCIR schema-bump gate
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout (with history)
+        uses: actions/checkout@v4
+        with:
+          # Need history so the script can diff against origin/main.
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run gate
+        run: |
+          # Use the PR's base ref when available, otherwise default
+          # to origin/main (the push branch case).
+          if [ -n "${{ github.event.pull_request.base.ref }}" ]; then
+            BASE="origin/${{ github.event.pull_request.base.ref }}"
+          else
+            BASE="origin/main"
+          fi
+          echo "kcir-schema gate: base=${BASE} head=HEAD"
+          python3 scripts/kcir_schema_check.py --base "${BASE}" --head HEAD

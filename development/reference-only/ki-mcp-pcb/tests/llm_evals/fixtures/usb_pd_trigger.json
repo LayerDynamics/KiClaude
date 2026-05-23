@@ -1,0 +1,28 @@
+{
+  "prompt": "Two-layer JLC board: USB-C connector, an IP2721 PD trigger IC negotiating 9V, output to a 2-pin screw terminal. Add bulk decoupling on the output.",
+  "thresholds": {
+    "component_set": 1.0,
+    "mpn_exact": 1.0,
+    "net_class": 1.0,
+    "net_membership": 0.8,
+    "constraints": 1.0,
+    "fab_target": 1.0
+  },
+  "expected_cir": {
+    "cir_version": "0.1",
+    "name": "usbc-pd-9v",
+    "components": [
+      {"refdes": "J1", "mpn": "USB4105-GF-A", "value": "USB-C"},
+      {"refdes": "U1", "mpn": "IP2721", "value": "PD trigger"},
+      {"refdes": "J2", "mpn": "1729128", "value": "2-pin screw terminal"},
+      {"refdes": "C1", "mpn": "GRM21BR60J106KE19L", "value": "10uF"},
+      {"refdes": "C2", "mpn": "GRM21BR60J106KE19L", "value": "10uF"}
+    ],
+    "nets": [
+      {"name": "GND", "net_class": "ground", "members": ["J1.1", "U1.4", "J2.2", "C1.2", "C2.2"]},
+      {"name": "VBUS", "net_class": "power", "members": ["J1.4", "U1.1"]},
+      {"name": "VOUT_9V", "net_class": "power", "members": ["U1.5", "J2.1", "C1.1", "C2.1"]}
+    ],
+    "fab": {"name": "jlcpcb", "layer_count": 2}
+  }
+}

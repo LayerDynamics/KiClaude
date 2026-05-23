@@ -1,0 +1,68 @@
+# Raspberry Pi Pico (RP2040 + 2MB flash + USB micro-B + 3-pin debug)
+#
+# Simplified for M0 validation; covers a denser pinout than QT Py.
+cir_version: "0.1"
+name: pi-pico-demo
+description: "Raspberry Pi Pico, simplified."
+
+components:
+  - refdes: U1
+    mpn: RP2040
+  - refdes: U2
+    mpn: W25Q16JVUXIQ
+    value: "2MB QSPI flash"
+  - refdes: U3
+    mpn: NCP1117ST33T3G
+    value: "3.3V LDO"
+  - refdes: J1
+    mpn: 10118194-0001LF
+    value: "USB micro-B"
+  - refdes: Y1
+    mpn: ABM8-12.000MHZ-B2T
+  - refdes: C1
+    mpn: GRM188R71C104KA01D
+    value: "100nF"
+  - refdes: C2
+    mpn: GRM188R71C104KA01D
+    value: "100nF"
+  - refdes: C3
+    mpn: GRM188R71C104KA01D
+    value: "100nF"
+  - refdes: C4
+    mpn: GRM21BR60J106KE19L
+    value: "10uF"
+  - refdes: D1
+    mpn: 1N5819HW-7-F
+    value: "Schottky"
+
+nets:
+  - name: GND
+    net_class: ground
+    members: ["U1.19", "U2.4", "U3.1", "J1.5", "C1.2", "C2.2", "C3.2", "C4.2"]
+  - name: "3V3"
+    net_class: power
+    members: ["U1.43", "U2.8", "U3.3", "C2.1", "C4.1"]
+  - name: VBUS
+    net_class: power
+    members: ["J1.1", "D1.2"]
+  - name: VSYS
+    net_class: power
+    members: ["D1.1", "U3.2"]
+  - name: USB_DP
+    net_class: differential
+    members: ["U1.47", "J1.3"]
+  - name: USB_DM
+    net_class: differential
+    members: ["U1.46", "J1.2"]
+
+constraints:
+  # USB 2.0 full/low speed — no controlled impedance required, but we
+  # declare the diff pair to exercise the constraint shape.
+  - kind: length_match
+    targets: [USB_DP, USB_DM]
+    tolerance_pct: 5.0
+    note: "USB diff pair length match"
+
+fab:
+  name: jlcpcb
+  layer_count: 2

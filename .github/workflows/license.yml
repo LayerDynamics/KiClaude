@@ -1,0 +1,48 @@
+name: license
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  license:
+    name: license audit
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "."
+
+      - name: Install cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check licenses
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Run kiclaude license_audit.sh
+        run: bash scripts/license_audit.sh

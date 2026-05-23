@@ -1,0 +1,25 @@
+// examples/esp32_s3_blinky.ato
+//
+// M1 demo target — "M1 done" means this builds end-to-end:
+//   kimp build examples/esp32_s3_blinky.ato --out build/blinky/
+// produces a routed 2-layer board, DRC-clean, with a JLCPCB-ready
+// fab package and an in-stock BOM.
+//
+// This file is parser-stubbed in M0; do not expect it to validate yet.
+
+module Blinky:
+    // ESP32-S3 + USB-C + 3V3 LDO + status LED
+    mcu = new ESP32_S3_WROOM_1
+    usb = new USB_C_Receptacle
+    ldo = new AMS1117_33
+    led = new LED_0603_red
+
+    // Power
+    usb.VBUS ~ ldo.VIN
+    ldo.VOUT ~ mcu.VDD
+    mcu.GPIO2 ~ led.A
+    led.K ~ GND
+
+    // Decoupling
+    100nF -- mcu.VDD to GND
+    22uF -- ldo.VOUT to GND

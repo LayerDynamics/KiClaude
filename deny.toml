@@ -1,0 +1,54 @@
+# cargo-deny configuration for kiclaude.
+#
+# License policy: Apache-2.0 compatible only. Anything that would
+# infect the kiclaude codebase with a copyleft obligation (GPL, AGPL,
+# LGPL with restrictive dynamic-linking, etc.) is forbidden in the
+# Rust dependency graph. Subprocess-only tools (Freerouting, KiCad
+# itself) live outside this graph — they are invoked via `kicad-cli`
+# / `java -jar` from `services/kiconnector`.
+
+[graph]
+all-features = false
+no-default-features = false
+# Target every host we ship binaries for plus the wasm target so the
+# wasm-pack build path is audited too.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "wasm32-unknown-unknown",
+]
+
+[licenses]
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "MIT-0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "BSL-1.0",
+    "CC0-1.0",
+]
+confidence-threshold = 0.93
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[advisories]
+db-path = "~/.cargo/advisory-db"
+db-urls = ["https://github.com/RustSec/advisory-db"]
+yanked = "warn"
+ignore = []
+
+[sources]
+unknown-registry = "warn"
+unknown-git = "warn"
+
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

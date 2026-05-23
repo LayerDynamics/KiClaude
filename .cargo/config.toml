@@ -1,0 +1,8 @@
+# Workspace-wide cargo configuration.
+#
+# `TS_RS_EXPORT_DIR` points ts-rs at the client's KCIR bindings folder.
+# Set both in env and in config so `cargo test --features ts-export`
+# regenerates the TypeScript bindings into the right place no matter
+# how the command is invoked.
+[env]
+TS_RS_EXPORT_DIR = { value = "client/src/lib/kcir", relative = true }

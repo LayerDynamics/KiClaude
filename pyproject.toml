@@ -1,0 +1,71 @@
+# kiclaude workspace root — uv-driven multi-package layout.
+#
+# Members live under `services/*`. The native `ki_native` extension
+# module (built from `crates/ki/` by maturin) is consumed by `kiserver`
+# via a path dependency declared on that service's pyproject.
+
+[project]
+name = "kiclaude-workspace"
+version = "0.1.0"
+description = "kiclaude — browser-native AI-native KiCad-compatible EDA (Python workspace root)."
+authors = [{ name = "layerdynamics", email = "layerdynamics@proton.me" }]
+license = { text = "Apache-2.0" }
+requires-python = ">=3.11"
+# This is a workspace-only project; it has no installable code of its
+# own. Members declare their own deps.
+
+[tool.uv.workspace]
+members = [
+    "services/agent",
+    "services/mcp",
+    "services/kiserver",
+    "services/kiconnector",
+]
+
+[tool.uv.sources]
+# `ki_native` is the Rust-backed PyO3 module from `crates/ki/`; install
+# it editable via maturin (`maturin develop --features python` inside
+# `crates/ki/`) so any kiserver test/run picks up the local build.
+ki_native = { path = "crates/ki", editable = true }
+kiclaude-agent = { workspace = true }
+kiclaude-mcp = { workspace = true }
+kiclaude-kiserver = { workspace = true }
+kiclaude-kiconnector = { workspace = true }
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["crates/ki/.venv", "crates/ki/target", ".venv", "node_modules"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "RUF", "TID", "S"]
+ignore = [
+    "S101", # asserts allowed in tests
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S"] # test files may use anything
+# kcir_schema_check is a CI script that shells out to `git` — the S6
+# rules about subprocess are a known cost of the design.
+"scripts/kcir_schema_check.py" = ["S603", "S607"]
+
+[tool.mypy]
+strict = true
+python_version = "3.11"
+warn_return_any = true
+warn_unused_ignores = true
+ignore_missing_imports = false
+namespace_packages = true
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = ["ki_native.*", "claude_agent_sdk.*", "mcp.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["services", "tests"]
+asyncio_mode = "auto"
+# Use importlib so each service's tests/ package doesn't collide on
+# the shared `tests` module name when pytest collects across the
+# workspace. See pytest docs §good-integration-practices.
+addopts = ["-ra", "--strict-markers", "--import-mode=importlib"]

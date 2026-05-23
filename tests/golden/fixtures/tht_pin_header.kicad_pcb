@@ -1,0 +1,35 @@
+(kicad_pcb (version 20240108) (generator kiclaude)
+
+  (general
+    (thickness 1.6)
+  )
+
+  (paper "A4")
+  (layers
+    (0 "F.Cu" signal)
+    (31 "B.Cu" signal)
+    (44 "Edge.Cuts" user)
+  )
+
+  (setup
+    (pad_to_mask_clearance 0.0)
+  )
+
+  (net 0 "")
+  (net 1 "+3V3")
+  (net 2 "GND")
+
+  (footprint "Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical"
+    (layer "F.Cu")
+    (uuid "22222222-2222-2222-2222-aaaaaaaaaaa1")
+    (at 50.0 50.0 0.0)
+    (attr through_hole)
+    (property "Reference" "J1")
+    (property "Value" "Conn_01x04")
+    (pad "1" thru_hole circle (at 0.0 0.0) (size 1.7 1.7) (drill 1.0) (layers "*.Cu" "*.Mask") (net 1 "+3V3") (uuid "p-j1-1"))
+    (pad "2" thru_hole circle (at 2.54 0.0) (size 1.7 1.7) (drill 1.0) (layers "*.Cu" "*.Mask") (uuid "p-j1-2"))
+    (pad "3" thru_hole circle (at 5.08 0.0) (size 1.7 1.7) (drill 1.0) (layers "*.Cu" "*.Mask") (uuid "p-j1-3"))
+    (pad "4" thru_hole circle (at 7.62 0.0) (size 1.7 1.7) (drill 1.0) (layers "*.Cu" "*.Mask") (net 2 "GND") (uuid "p-j1-4"))
+  )
+
+)

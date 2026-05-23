@@ -1,0 +1,29 @@
+[project]
+name = "ki-mcp-pcb-web"
+version = "0.0.1"
+description = "Web viewer for ki-mcp-pcb — drop a CIR YAML in, see validation + components + KiCanvas PCB preview."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "ki-mcp-pcb-core",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "python-multipart>=0.0.20",  # for FastAPI file uploads
+]
+
+[project.optional-dependencies]
+# The Claude Agent SDK powers the GUI co-pilot chat (SPEC-1 G2). Optional:
+# the pipeline-only GUI runs without it.
+agent = ["claude-agent-sdk>=0.2"]
+
+[project.scripts]
+ki-mcp-pcb-web = "ki_mcp_pcb_web.server:run"
+ki-mcp-pcb-openapi = "ki_mcp_pcb_web.openapi:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ki_mcp_pcb_web"]

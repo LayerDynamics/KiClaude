@@ -1,0 +1,76 @@
+name: e2e
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  playwright:
+    name: playwright (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Rust + wasm — the client needs the ki / cad wasm packages.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "."
+      - name: Install wasm-pack
+        uses: jetli/wasm-pack-action@v0.4.0
+
+      # Node — the gateway + client run from this stack.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      # Python — kiserver depends on ki_native; kc_ping depends on it
+      # indirectly via M0-P-06.
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+          enable-cache: true
+      - run: uv python install 3.11
+
+      - name: Install workspace deps
+        run: |
+          uv sync --all-extras --all-packages
+          uv tool install maturin
+          (cd crates/ki && VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv maturin develop --features python)
+          pnpm install --frozen-lockfile=false
+          wasm-pack build --target web crates/ki
+          wasm-pack build --target web crates/cad
+
+      - name: Install Playwright browsers
+        if: hashFiles('tests/e2e/package.json') != ''
+        run: |
+          cd tests/e2e
+          pnpm install --frozen-lockfile=false
+          pnpm exec playwright install --with-deps
+
+      - name: Run e2e smoke
+        if: hashFiles('tests/e2e/package.json') != ''
+        env:
+          # ANTHROPIC_API_KEY-gated tests skip themselves when the
+          # secret is not set on the runner.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          cd tests/e2e
+          pnpm exec playwright test
+
+      - name: e2e suite missing (xfail-no-suite)
+        if: hashFiles('tests/e2e/package.json') == ''
+        run: |
+          echo "tests/e2e/ not yet wired (M0-Q-03 pending) — gate is no-op for now."

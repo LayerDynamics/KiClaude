@@ -1,0 +1,47 @@
+[package]
+name = "kiclaude-ki"
+description = "KiCad file-format parsers, emitters, and KCIR (kiclaude Canonical IR) for kiclaude."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[lib]
+name = "kiclaude_ki"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+# Enables the PyO3 bindings (`crates/ki/src/python.rs`) so maturin can
+# build the `ki_native` Python extension module. Native cargo builds
+# don't activate this — it's pulled in via `maturin develop --features
+# python` or by the [tool.maturin] section in `pyproject.toml`.
+python = ["dep:pyo3"]
+# Enables `#[derive(ts_rs::TS)]` on every KCIR public type. Bindings
+# are emitted into `client/src/lib/kcir/` when `cargo test --features
+# ts-export` runs (M1-R-03). Off by default so the wasm + pyo3 build
+# don't pull in ts-rs.
+ts-export = ["dep:ts-rs"]
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+semver.workspace = true
+pyo3 = { version = "0.25", features = ["extension-module", "abi3-py39"], optional = true }
+ts-rs = { version = "11", features = ["serde-compat"], optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+serde-wasm-bindgen = "0.6"
+
+[dev-dependencies]
+proptest = "1"
+pretty_assertions = "1"
+tempfile = "3"

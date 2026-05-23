@@ -1,0 +1,18 @@
+{
+  "name": "a11y",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "kiclaude axe-core a11y scan (M1-Q-05).",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "install:browsers": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.10.0",
+    "@playwright/test": "^1.55.0",
+    "@types/node": "^24.12.3",
+    "typescript": "~6.0.2"
+  }
+}

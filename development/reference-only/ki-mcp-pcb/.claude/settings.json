@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "mcpServers": {
+    "ki-mcp-pcb": {
+      "command": "uv",
+      "args": ["run", "--package", "ki-mcp-pcb-server", "ki-mcp-pcb-server"],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  }
+}

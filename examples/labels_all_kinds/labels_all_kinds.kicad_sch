@@ -1,0 +1,18 @@
+(kicad_sch (version 20240108) (generator "kiclaude")
+  (uuid "33333333-3333-3333-3333-333333333333")
+  (paper "A4")
+  (lib_symbols
+    (symbol "power:VCC"
+      (property "Reference" "#PWR" (at 0 0 0))
+      (property "Value" "VCC" (at 0 0 0))
+    )
+  )
+  (symbol (lib_id "power:VCC") (at 100.0 50.0 0) (unit 1) (in_bom yes) (on_board yes)
+    (uuid "cccccccc-cccc-cccc-cccc-cccccccccc01")
+    (property "Reference" "#PWR01" (at 100 48 0))
+    (property "Value" "VCC" (at 100 46 0))
+  )
+  (label "DATA0" (at 50.0 60.0 0) (effects (font (size 1.27 1.27))) (uuid "30000000-0000-0000-0000-000000000001"))
+  (global_label "USB_DP" (shape bidirectional) (at 60.0 60.0 0) (effects (font (size 1.27 1.27))) (uuid "30000000-0000-0000-0000-000000000002"))
+  (hierarchical_label "SPI_MOSI" (shape input) (at 70.0 60.0 0) (effects (font (size 1.27 1.27))) (uuid "30000000-0000-0000-0000-000000000003"))
+)

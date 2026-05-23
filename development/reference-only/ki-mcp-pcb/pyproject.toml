@@ -1,0 +1,119 @@
+[project]
+name = "ki-mcp-pcb"
+version = "0.0.1"
+description = "Plain-text to manufacturable PCB pipeline: Python library + CLI + MCP server for Claude Code, targeting KiCad."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "layerdynamics", email = "layerdynamics@proton.me" }]
+keywords = ["kicad", "pcb", "eda", "mcp", "claude", "hardware", "skidl", "atopile"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Manufacturing",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+]
+dependencies = [
+    "ki-mcp-pcb-core",
+    "ki-mcp-pcb-cli",
+    "ki-mcp-pcb-server",
+    # GUI launcher — a zero-dependency Python entry point, so it's a
+    # default member (unlike `web`, whose FastAPI/uvicorn stack is opt-in).
+    "ki-mcp-pcb-gui",
+]
+
+[project.optional-dependencies]
+web = ["ki-mcp-pcb-web"]
+
+[project.urls]
+Homepage = "https://github.com/layerdynamics/ki-mcp-pcb"
+Documentation = "https://github.com/layerdynamics/ki-mcp-pcb/blob/main/SPEC.md"
+Issues = "https://github.com/layerdynamics/ki-mcp-pcb/issues"
+
+# uv workspace — see https://docs.astral.sh/uv/concepts/workspaces/
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+ki-mcp-pcb-core = { workspace = true }
+ki-mcp-pcb-cli = { workspace = true }
+ki-mcp-pcb-server = { workspace = true }
+ki-mcp-pcb-web = { workspace = true }
+ki-mcp-pcb-gui = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "pre-commit>=3.7",
+    # Test-suite dependencies. These mirror the runtime optional-extras
+    # (core[kicad], core[ipc], the web package) so a plain `uv sync`
+    # produces an environment that can run the *whole* test suite —
+    # tests that need a missing one importorskip past it otherwise.
+    "hypothesis>=6.0",            # property-based tests (tests/property/)
+    "kiutils>=1.4",               # KiCad file synthesis (schematic/PCB tests)
+    "kicad-python>=0.3",          # kipy IPC placer tests
+    "ki-mcp-pcb-web",             # web server tests — pulls fastapi/uvicorn
+    "claude-agent-sdk>=0.2",      # GUI co-pilot agent tests (stubbed transport)
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W",   # pycodestyle / pyflakes
+    "I",              # isort
+    "B",              # bugbear
+    "UP",             # pyupgrade
+    "RUF",            # ruff-specific
+    "SIM",            # simplify
+    "TID",            # tidy-imports
+]
+ignore = [
+    "E501",   # line length handled by formatter
+    # Em-dash / en-dash are used deliberately in docstrings, comments, and
+    # the occasional string. Don't flag them.
+    "RUF001",
+    "RUF002",
+    "RUF003",
+]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+plugins = ["pydantic.mypy"]
+# Per-package overrides live in each packages/*/pyproject.toml
+
+[[tool.mypy.overrides]]
+module = [
+    "yaml",
+    "mcp", "mcp.*",
+    "kiutils", "kiutils.*",
+    "kipy", "kipy.*",
+    "atopile", "atopile.*",
+    "anthropic", "anthropic.*",
+    "uvicorn", "uvicorn.*",
+    "claude_agent_sdk", "claude_agent_sdk.*",
+]
+ignore_missing_imports = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "packages"]
+addopts = "-ra --strict-markers --import-mode=importlib"
+filterwarnings = ["error"]

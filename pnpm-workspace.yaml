@@ -1,0 +1,6 @@
+packages:
+  - "client"
+  - "packages/*"
+  - "services/server"
+  - "tests/a11y"
+  - "tests/e2e"

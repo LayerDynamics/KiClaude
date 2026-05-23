@@ -1,0 +1,25 @@
+(kicad_pcb (version 20240108) (generator kiclaude)
+
+  (general
+    (thickness 1.6)
+  )
+
+  (paper "A4")
+  (layers
+    (0 "F.Cu" signal)
+    (31 "B.Cu" signal)
+    (44 "Edge.Cuts" user)
+  )
+
+  (setup
+    (pad_to_mask_clearance 0.0)
+  )
+
+  (net 0 "")
+  (net 1 "CLK_25MHZ")
+
+  (segment (start 10.0 10.0) (end 60.0 10.0) (width 0.25) (layer "F.Cu") (net 1) (locked) (uuid "t-clk-1"))
+
+  (via (at 60.0 10.0) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1) (locked) (uuid "v-locked-1"))
+
+)

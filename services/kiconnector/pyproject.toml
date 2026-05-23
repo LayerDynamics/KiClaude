@@ -1,0 +1,28 @@
+[project]
+name = "kiclaude-kiconnector"
+version = "0.1.0"
+description = "kiclaude kiconnector — local subprocess broker for kicad-cli and friends."
+authors = [{ name = "layerdynamics", email = "layerdynamics@proton.me" }]
+license = { text = "Apache-2.0" }
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "anyio>=4.5",
+    "structlog>=24.4",
+    "pydantic>=2.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.27",
+]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kiconnector"]

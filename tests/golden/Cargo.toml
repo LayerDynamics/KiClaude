@@ -1,0 +1,24 @@
+[package]
+name = "kiclaude-golden"
+description = "kiclaude golden-file round-trip CI gate (M0-Q-02)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[lib]
+name = "kiclaude_golden"
+path = "src/lib.rs"
+
+[dev-dependencies]
+kiclaude-ki = { path = "../../crates/ki" }
+kiclaude-cad = { path = "../../crates/cad" }
+walkdir = "2"
+pretty_assertions = "1"
+similar = "2"
+# M2-R-06 cross-check parses `kicad-cli pcb drc --format json` output.
+serde_json = { workspace = true }

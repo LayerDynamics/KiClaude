@@ -1,0 +1,15 @@
+(kicad_sch (version 20240108) (generator "kiclaude") (generator_version "0.1")
+  (uuid "5c7e0a3e-4f9b-4ddc-9b3d-000100000001")
+  (paper "A4")
+  (title_block
+    (title "blinky")
+    (date "")
+    (rev "0.1")
+    (company "")
+  )
+  (lib_symbols
+  )
+  (sheet_instances
+    (path "/" (page "1"))
+  )
+)

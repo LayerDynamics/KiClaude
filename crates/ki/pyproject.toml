@@ -1,0 +1,20 @@
+[build-system]
+requires = ["maturin>=1.7"]
+build-backend = "maturin"
+
+[project]
+name = "ki_native"
+version = "0.1.0"
+description = "Native (Rust) Python bindings for kiclaude's KCIR + KiCad file I/O."
+authors = [{ name = "layerdynamics", email = "layerdynamics@proton.me" }]
+license = { text = "Apache-2.0" }
+requires-python = ">=3.9"
+readme = "README.md"
+
+[tool.maturin]
+# The Cargo manifest sits beside this file — no manifest-path override
+# needed. Build with `maturin develop --features python` from this dir
+# (or `maturin build --release` for a wheel).
+features = ["python"]
+module-name = "ki_native"
+strip = true

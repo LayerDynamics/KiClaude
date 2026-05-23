@@ -1,0 +1,59 @@
+name: rust
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  rust:
+    name: rust (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-14]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "."
+
+      - name: Install wasm-pack
+        uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: latest
+
+      - name: cargo fmt --check
+        run: cargo fmt --check --all
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: cargo test
+        run: cargo test --workspace
+
+      # M0-Q-02 — explicit round-trip CI gate. Same suite that runs as
+      # part of `cargo test --workspace`, repeated here with --nocapture
+      # so a failing round-trip surfaces the unified diff directly in
+      # the CI log (instead of forcing a re-run with backtraces).
+      - name: M0-Q-02 golden-file round-trip gate
+        run: cargo test -p kiclaude-golden --tests -- --nocapture
+
+      - name: wasm-pack build (ki)
+        run: wasm-pack build --target web crates/ki
+
+      - name: wasm-pack build (cad)
+        run: wasm-pack build --target web crates/cad
