@@ -93,3 +93,7 @@ playwright-report/
 # Coverage / profiling output
 *.profraw
 *.profdata
+
+# M2-Q-04 NFR-003 benchmark output — per-run JSON, persisted as CI
+# artifacts via Playwright's reporter; not source-controlled.
+tests/perf/results/

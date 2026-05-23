@@ -1,0 +1,18 @@
+{
+  "name": "perf",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "kiclaude M2-Q-04 NFR-003 frame-timing benchmark (Playwright).",
+  "scripts": {
+    "fixture": "uv run python generate_dense_board.py",
+    "test": "playwright test",
+    "test:integrated": "PERF_GPU=integrated playwright test",
+    "install:browsers": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/node": "^24.12.3",
+    "typescript": "~6.0.2"
+  }
+}
