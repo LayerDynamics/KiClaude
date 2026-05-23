@@ -12,6 +12,8 @@
 //! - The React `RouteTool` (M2-T-03) calls the same wasm entry point
 //!   live as the user drags the route endpoint.
 
+pub mod diffpair;
 pub mod walkaround;
 
+pub use diffpair::{route as route_diffpair, DiffPairInput, DiffPairRouteResult};
 pub use walkaround::{route, RoutingError, WalkaroundInput, WalkaroundResult};
