@@ -93,7 +93,7 @@ describe("/api/ui/<tool>/<project_id>", () => {
     expect(res.status).toBe(400);
   });
 
-  it("exposes the expected schematic (5) + PCB (5) UI tools on the allowlist", () => {
+  it("exposes the expected schematic (5) + PCB (6) UI tools on the allowlist", () => {
     expect([...ALLOWED_UI_TOOLS].sort()).toEqual([
       // M1-P-05 schematic UI tools.
       "ui_junction_place_xy",
@@ -107,6 +107,8 @@ describe("/api/ui/<tool>/<project_id>", () => {
       "ui_track_draw_points",
       "ui_via_place_xy",
       "ui_zone_create_polygon",
+      // M2-T-05 board outline tool.
+      "ui_outline_create_polygon",
     ].sort());
   });
 });

@@ -34,6 +34,8 @@ export const ALLOWED_UI_TOOLS = [
   "ui_track_draw_points",
   "ui_via_place_xy",
   "ui_zone_create_polygon",
+  // M2-T-05 board outline tool.
+  "ui_outline_create_polygon",
 ] as const;
 export type AllowedUiTool = (typeof ALLOWED_UI_TOOLS)[number];
 

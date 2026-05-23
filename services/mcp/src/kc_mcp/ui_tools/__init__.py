@@ -16,6 +16,7 @@ from .footprint_move import ui_footprint_move
 from .footprint_xy import ui_footprint_place_xy
 from .junction_xy import ui_junction_place_xy
 from .label_xy import ui_label_place_xy
+from .outline_polygon import ui_outline_create_polygon
 from .symbol_edit import ui_symbol_edit_props
 from .symbol_xy import ui_symbol_place_xy
 from .track_points import ui_track_draw_points
@@ -30,12 +31,14 @@ UI_TOOLS = {
     "ui_label_place_xy": ui_label_place_xy,
     "ui_junction_place_xy": ui_junction_place_xy,
     "ui_symbol_edit_props": ui_symbol_edit_props,
-    # M2-P-05 PCB UI tools (5).
+    # M2-P-05 PCB UI tools.
     "ui_footprint_place_xy": ui_footprint_place_xy,
     "ui_footprint_move": ui_footprint_move,
     "ui_track_draw_points": ui_track_draw_points,
     "ui_via_place_xy": ui_via_place_xy,
     "ui_zone_create_polygon": ui_zone_create_polygon,
+    # M2-T-05 extension — board outline polygon.
+    "ui_outline_create_polygon": ui_outline_create_polygon,
 }
 
 
@@ -45,6 +48,7 @@ __all__ = [
     "ui_footprint_place_xy",
     "ui_junction_place_xy",
     "ui_label_place_xy",
+    "ui_outline_create_polygon",
     "ui_symbol_edit_props",
     "ui_symbol_place_xy",
     "ui_track_draw_points",

@@ -361,6 +361,7 @@ def test_ui_pcb_tools_are_not_in_claude_registry() -> None:
         "ui_track_draw_points",
         "ui_via_place_xy",
         "ui_zone_create_polygon",
+        "ui_outline_create_polygon",
     ):
         assert ui_name not in names
     # Build-time guard fires if a `ui_*` slips in.
@@ -372,8 +373,77 @@ def test_ui_pcb_tools_are_not_in_claude_registry() -> None:
             "ui_track_draw_points",
             "ui_via_place_xy",
             "ui_zone_create_polygon",
+            "ui_outline_create_polygon",
         }
     )
+
+
+def test_ui_outline_create_polygon_appends_to_board_outlines() -> None:
+    from kc_mcp.ui_tools import ui_outline_create_polygon
+
+    project: dict[str, Any] = {"pcb": {}}
+    result = ui_outline_create_polygon(
+        project,
+        outline_mm=[(0.0, 0.0), (50.0, 0.0), (50.0, 30.0), (0.0, 30.0)],
+        cutouts_mm=[
+            [(10.0, 10.0), (20.0, 10.0), (20.0, 20.0), (10.0, 20.0)],
+        ],
+        stroke_width_mm=0.1,
+    )
+    assert result["ok"] is True
+    assert result["cutout_count"] == 1
+    assert result["layer"] == "Edge.Cuts"
+    outlines = project["pcb"]["board_outlines"]
+    assert len(outlines) == 1
+    assert outlines[0]["uuid"] == result["outline_uuid"]
+    assert outlines[0]["stroke_width_mm"] == 0.1
+    assert outlines[0]["outline_mm"] == [
+        [0.0, 0.0],
+        [50.0, 0.0],
+        [50.0, 30.0],
+        [0.0, 30.0],
+    ]
+    assert outlines[0]["cutouts_mm"] == [
+        [[10.0, 10.0], [20.0, 10.0], [20.0, 20.0], [10.0, 20.0]],
+    ]
+
+
+def test_ui_outline_create_polygon_rejects_thin_outline() -> None:
+    from kc_mcp.ui_tools import ui_outline_create_polygon
+
+    project: dict[str, Any] = {"pcb": {}}
+    result = ui_outline_create_polygon(
+        project, outline_mm=[(0.0, 0.0), (1.0, 0.0)]
+    )
+    assert result["ok"] is False
+    assert "at least 3" in result["error"]
+    assert "board_outlines" not in project["pcb"]
+
+
+def test_ui_outline_create_polygon_rejects_non_edge_cuts_layer() -> None:
+    from kc_mcp.ui_tools import ui_outline_create_polygon
+
+    project: dict[str, Any] = {"pcb": {}}
+    result = ui_outline_create_polygon(
+        project,
+        outline_mm=[(0.0, 0.0), (1.0, 0.0), (0.5, 1.0)],
+        layer="F.Cu",
+    )
+    assert result["ok"] is False
+    assert "Edge.Cuts" in result["error"]
+
+
+def test_ui_outline_create_polygon_rejects_thin_cutout() -> None:
+    from kc_mcp.ui_tools import ui_outline_create_polygon
+
+    project: dict[str, Any] = {"pcb": {}}
+    result = ui_outline_create_polygon(
+        project,
+        outline_mm=[(0.0, 0.0), (10.0, 0.0), (5.0, 8.0)],
+        cutouts_mm=[[(1.0, 1.0), (2.0, 1.0)]],
+    )
+    assert result["ok"] is False
+    assert "cutouts_mm[0]" in result["error"]
 
 
 # ---------------------------------------------------------------------
