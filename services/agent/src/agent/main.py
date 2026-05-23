@@ -22,7 +22,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from agent import __version__, auth
+from agent import __version__, ask_user, auth
 
 log = structlog.get_logger(__name__)
 
@@ -104,6 +104,69 @@ async def auth_status() -> dict[str, Any]:
         "source": result.source,
         "detail": result.detail,
     }
+
+
+# ---------------------------------------------------------------------
+# M3-P-08 — AskUserQuestion bridge endpoints.
+#
+# Three endpoints the WebSocket gateway uses to shuttle questions
+# between the agent (`await ask_user.dispatch_question(...)`) and
+# the React chat sidebar (which renders `AskUserQuestionCard` and
+# POSTs the user's pick back).
+# ---------------------------------------------------------------------
+
+
+class AskUserAnswerBody(BaseModel):
+    """Body for `POST /ask-user/{question_id}/answer`."""
+
+    picks: list[str] = Field(default_factory=list, max_length=8)
+    notes: str = Field(default="", max_length=4_000)
+
+
+@app.get("/ask-user/pending")
+async def ask_user_pending() -> dict[str, Any]:
+    """Return every still-unanswered question's payload. The
+    WebSocket gateway polls this on each accepted connection and
+    forwards every entry as one `ask_user_question` frame to the
+    React side."""
+    questions = await ask_user.registry().pending()
+    return {"ok": True, "questions": questions}
+
+
+@app.post("/ask-user/{question_id}/answer")
+async def ask_user_answer(question_id: str, body: AskUserAnswerBody) -> dict[str, Any]:
+    """Resolve the awaiting agent coroutine with the user's pick.
+    Returns `{ok: false, error: ...}` when the question id is
+    unknown — e.g. the caller cancelled before the answer landed."""
+    answer = ask_user.AskUserAnswer(picks=body.picks, notes=body.notes)
+    ok = await ask_user.registry().answer(question_id, answer)
+    if not ok:
+        raise HTTPException(
+            status_code=404,
+            detail=f"no pending question with id {question_id!r}",
+        )
+    log.info(
+        "ask_user_answered",
+        question_id=question_id,
+        picks=len(body.picks),
+        notes_chars=len(body.notes),
+    )
+    return {"ok": True}
+
+
+@app.delete("/ask-user/{question_id}")
+async def ask_user_cancel(question_id: str) -> dict[str, Any]:
+    """Cancel a pending question — used by the gateway when the
+    WebSocket drops before the user answers, so the agent coroutine
+    receives a CancelledError instead of waiting forever."""
+    ok = await ask_user.registry().cancel(question_id)
+    if not ok:
+        raise HTTPException(
+            status_code=404,
+            detail=f"no pending question with id {question_id!r}",
+        )
+    log.info("ask_user_cancelled", question_id=question_id)
+    return {"ok": True}
 
 
 __all__ = ["app"]
