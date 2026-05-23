@@ -16,6 +16,7 @@ from .footprint_move import ui_footprint_move
 from .footprint_xy import ui_footprint_place_xy
 from .junction_xy import ui_junction_place_xy
 from .label_xy import ui_label_place_xy
+from .layer_color import ui_layer_color_set, ui_layer_reorder
 from .netclass_edit import ui_netclass_delete, ui_netclass_set
 from .outline_polygon import ui_outline_create_polygon
 from .symbol_edit import ui_symbol_edit_props
@@ -43,6 +44,9 @@ UI_TOOLS = {
     # M2-T-07 extension — net-class panel.
     "ui_netclass_set": ui_netclass_set,
     "ui_netclass_delete": ui_netclass_delete,
+    # M2-T-08 extension — layer panel (colour picker + reorder).
+    "ui_layer_color_set": ui_layer_color_set,
+    "ui_layer_reorder": ui_layer_reorder,
 }
 
 
@@ -52,6 +56,8 @@ __all__ = [
     "ui_footprint_place_xy",
     "ui_junction_place_xy",
     "ui_label_place_xy",
+    "ui_layer_color_set",
+    "ui_layer_reorder",
     "ui_netclass_delete",
     "ui_netclass_set",
     "ui_outline_create_polygon",

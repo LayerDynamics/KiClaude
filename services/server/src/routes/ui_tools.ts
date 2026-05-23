@@ -39,6 +39,9 @@ export const ALLOWED_UI_TOOLS = [
   // M2-T-07 net-class panel.
   "ui_netclass_set",
   "ui_netclass_delete",
+  // M2-T-08 layer panel finaliser — colour picker + physical reorder.
+  "ui_layer_color_set",
+  "ui_layer_reorder",
 ] as const;
 export type AllowedUiTool = (typeof ALLOWED_UI_TOOLS)[number];
 

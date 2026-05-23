@@ -38,6 +38,11 @@ interface PcbViewState {
   /** Per-layer-id view state. Layers not in this map default to
    *  `{ visible: true, opacity: 1 }`. */
   layerView: Record<number, PcbLayerView>;
+  /** Per-layer-id colour overrides (`#RRGGBB`) — persisted into
+   *  `.kicad_pro` via `ui_layer_color_set` (M2-T-08). Layers not
+   *  in this map fall back to the deterministic-from-name swatch
+   *  in `LayerStack.layerColour`. */
+  layerColors: Record<number, string>;
   /** The currently-active layer for new edits (footprint pad layer,
    *  new track layer, etc.). `null` if no PCB is loaded. */
   activeLayerId: number | null;
@@ -48,33 +53,57 @@ interface PcbViewState {
   cycleActiveLayer: (delta: number) => void;
   toggleLayerVisible: (id: number) => void;
   setLayerOpacity: (id: number, opacity: number) => void;
+  /** Set the per-layer colour. Caller is responsible for the
+   *  server round-trip via `ui_layer_color_set`; this store only
+   *  carries the working-copy state. */
+  setLayerColor: (id: number, hex: string) => void;
+  /** Bulk replace the colour map — used by the project loader
+   *  when a project's `.kicad_pro` colours come into view. */
+  setLayerColors: (colors: Record<number, string>) => void;
   /** Drag-reorder: move `id` to the position currently held by
-   *  `targetId`. Layer order matters for visual stacking order. */
-  reorderLayer: (id: number, targetId: number) => void;
+   *  `targetId`. Layer order matters for visual stacking order.
+   *  Refuses the move when the source or target is `F.Cu`/`B.Cu`
+   *  (KiCad's stackup anchors), or when the two layers belong to
+   *  different kinds (a silkscreen layer can't slot between two
+   *  copper layers). Returns `true` on a successful move. */
+  reorderLayer: (id: number, targetId: number) => boolean;
 }
 
 const DEFAULT_VIEW: PcbLayerView = { visible: true, opacity: 1 };
+
+const FIXED_STACKUP_NAMES = new Set(["F.Cu", "B.Cu"]);
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
 export const usePcbViewStore = create<PcbViewState>()(
   devtools(
     (set, get) => ({
       layers: [],
       layerView: {},
+      layerColors: {},
       activeLayerId: null,
       setLayers(layers) {
         set((state) => {
-          // Preserve any per-layer view overrides for layer ids
-          // that survive the new list; reset the rest.
-          const surviving: Record<number, PcbLayerView> = {};
+          // Preserve any per-layer view + colour overrides for layer
+          // ids that survive the new list; reset the rest.
+          const survivingView: Record<number, PcbLayerView> = {};
+          const survivingColors: Record<number, string> = {};
           for (const layer of layers) {
-            surviving[layer.id] = state.layerView[layer.id] ?? DEFAULT_VIEW;
+            survivingView[layer.id] = state.layerView[layer.id] ?? DEFAULT_VIEW;
+            if (state.layerColors[layer.id] !== undefined) {
+              survivingColors[layer.id] = state.layerColors[layer.id]!;
+            }
           }
           const active =
             state.activeLayerId != null &&
             layers.some((l) => l.id === state.activeLayerId)
               ? state.activeLayerId
               : (layers.find((l) => l.kind === "copper")?.id ?? layers[0]?.id ?? null);
-          return { layers, layerView: surviving, activeLayerId: active };
+          return {
+            layers,
+            layerView: survivingView,
+            layerColors: survivingColors,
+            activeLayerId: active,
+          };
         });
       },
       setActiveLayer(id) {
@@ -121,18 +150,51 @@ export const usePcbViewStore = create<PcbViewState>()(
           };
         });
       },
+      setLayerColor(id, hex) {
+        if (!HEX_RE.test(hex)) return;
+        set((state) => ({
+          layerColors: { ...state.layerColors, [id]: hex.toLowerCase() },
+        }));
+      },
+      setLayerColors(colors) {
+        // Filter to entries with valid `#RRGGBB` strings so the
+        // store can't be polluted by a malformed project file.
+        const filtered: Record<number, string> = {};
+        for (const [k, v] of Object.entries(colors)) {
+          const numericId = Number.parseInt(k, 10);
+          if (Number.isFinite(numericId) && typeof v === "string" && HEX_RE.test(v)) {
+            filtered[numericId] = v.toLowerCase();
+          }
+        }
+        set(() => ({ layerColors: filtered }));
+      },
       reorderLayer(id, targetId) {
-        if (id === targetId) return;
-        set((state) => {
-          const from = state.layers.findIndex((l) => l.id === id);
-          const to = state.layers.findIndex((l) => l.id === targetId);
-          if (from < 0 || to < 0) return state;
-          const next = state.layers.slice();
-          const [moved] = next.splice(from, 1);
-          if (!moved) return state;
-          next.splice(to, 0, moved);
-          return { layers: next };
-        });
+        if (id === targetId) return false;
+        const state = get();
+        const from = state.layers.findIndex((l) => l.id === id);
+        const to = state.layers.findIndex((l) => l.id === targetId);
+        if (from < 0 || to < 0) return false;
+        const src = state.layers[from]!;
+        const tgt = state.layers[to]!;
+        // KiCad stackup anchors — F.Cu / B.Cu can never move.
+        if (
+          FIXED_STACKUP_NAMES.has(src.name) ||
+          FIXED_STACKUP_NAMES.has(tgt.name)
+        ) {
+          return false;
+        }
+        // A layer can only swap with another of the same kind so
+        // pcbnew's stackup model (all copper layers contiguous,
+        // silkscreen pairs around them, etc.) is preserved.
+        if (src.kind !== tgt.kind) {
+          return false;
+        }
+        const next = state.layers.slice();
+        const [moved] = next.splice(from, 1);
+        if (!moved) return false;
+        next.splice(to, 0, moved);
+        set(() => ({ layers: next }));
+        return true;
       },
     }),
     { name: "pcbViewStore" },

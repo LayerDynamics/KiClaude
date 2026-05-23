@@ -526,6 +526,84 @@ def test_ui_netclass_delete_unknown_returns_error() -> None:
     assert "NonExistent" in result["error"]
 
 
+def _layer_stack_project() -> dict[str, Any]:
+    return {
+        "pcb": {
+            "layers": [
+                {"id": 0, "name": "F.Cu", "kind": "copper"},
+                {"id": 1, "name": "In1.Cu", "kind": "copper"},
+                {"id": 2, "name": "In2.Cu", "kind": "copper"},
+                {"id": 31, "name": "B.Cu", "kind": "copper"},
+                {"id": 37, "name": "F.SilkS", "kind": "silkscreen"},
+            ],
+        }
+    }
+
+
+def test_ui_layer_color_set_persists_into_pcb_layer_colors() -> None:
+    from kc_mcp.ui_tools import ui_layer_color_set
+
+    project = _layer_stack_project()
+    result = ui_layer_color_set(project, layer_id=0, color="#FF8800")
+    assert result["ok"] is True
+    assert result["color"] == "#ff8800"
+    assert project["pcb"]["layer_colors"]["0"] == "#ff8800"
+
+    # Updating overwrites the prior value.
+    ui_layer_color_set(project, layer_id=0, color="#000000")
+    assert project["pcb"]["layer_colors"]["0"] == "#000000"
+
+
+def test_ui_layer_color_set_rejects_bad_hex() -> None:
+    from kc_mcp.ui_tools import ui_layer_color_set
+
+    project = _layer_stack_project()
+    assert ui_layer_color_set(project, layer_id=0, color="ff8800")["ok"] is False
+    assert ui_layer_color_set(project, layer_id=0, color="#ff88")["ok"] is False
+    assert ui_layer_color_set(project, layer_id=0, color="#zzzzzz")["ok"] is False
+    assert "layer_colors" not in project["pcb"]
+
+
+def test_ui_layer_color_set_rejects_unknown_layer_id() -> None:
+    from kc_mcp.ui_tools import ui_layer_color_set
+
+    project = _layer_stack_project()
+    result = ui_layer_color_set(project, layer_id=999, color="#abcdef")
+    assert result["ok"] is False
+    assert "999" in result["error"]
+
+
+def test_ui_layer_reorder_refuses_fixed_stackup_anchors() -> None:
+    from kc_mcp.ui_tools import ui_layer_reorder
+
+    project = _layer_stack_project()
+    fcu = ui_layer_reorder(project, layer_id=0, target_id=2)
+    assert fcu["ok"] is False
+    bcu = ui_layer_reorder(project, layer_id=2, target_id=31)
+    assert bcu["ok"] is False
+
+
+def test_ui_layer_reorder_refuses_cross_kind() -> None:
+    from kc_mcp.ui_tools import ui_layer_reorder
+
+    project = _layer_stack_project()
+    # Silkscreen layer can't slot between two copper layers.
+    result = ui_layer_reorder(project, layer_id=37, target_id=1)
+    assert result["ok"] is False
+    assert "silkscreen" in result["error"]
+
+
+def test_ui_layer_reorder_moves_inner_copper_layers() -> None:
+    from kc_mcp.ui_tools import ui_layer_reorder
+
+    project = _layer_stack_project()
+    # Move In1.Cu past In2.Cu — both copper, neither is F.Cu/B.Cu.
+    result = ui_layer_reorder(project, layer_id=1, target_id=2)
+    assert result["ok"] is True
+    names = [layer["name"] for layer in project["pcb"]["layers"]]
+    assert names == ["F.Cu", "In2.Cu", "In1.Cu", "B.Cu", "F.SilkS"]
+
+
 # ---------------------------------------------------------------------
 # Read-only / proxy tools.
 # ---------------------------------------------------------------------

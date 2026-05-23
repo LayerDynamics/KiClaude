@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 
+import { useProjectStore } from "../../stores/projectStore";
 import {
   getLayerView,
   usePcbViewStore,
@@ -11,6 +12,11 @@ export interface LayerStackProps {
   className?: string;
   /** Fixed pixel height; `undefined` lets the parent govern. */
   height?: number;
+  /** Gateway base URL — defaults to `/api/ui`. Used by the M2-T-08
+   *  colour-picker + reorder server round-trips. */
+  apiBase?: string;
+  /** Test seam — defaults to `globalThis.fetch`. */
+  fetcher?: typeof fetch;
 }
 
 /**
@@ -33,14 +39,23 @@ export interface LayerStackProps {
  * `data-testid="layer-stack"` and per-row `data-layer-id="N"` so
  * Playwright (`M2-Q-02`) can drive it directly.
  */
-export function LayerStack({ className, height }: LayerStackProps) {
+export function LayerStack({
+  className,
+  height,
+  apiBase = "/api/ui",
+  fetcher,
+}: LayerStackProps) {
   const layers = usePcbViewStore((s) => s.layers);
   const activeLayerId = usePcbViewStore((s) => s.activeLayerId);
   const layerView = usePcbViewStore((s) => s.layerView);
+  const layerColors = usePcbViewStore((s) => s.layerColors);
   const setActiveLayer = usePcbViewStore((s) => s.setActiveLayer);
   const toggleLayerVisible = usePcbViewStore((s) => s.toggleLayerVisible);
   const setLayerOpacity = usePcbViewStore((s) => s.setLayerOpacity);
+  const setLayerColor = usePcbViewStore((s) => s.setLayerColor);
   const reorderLayer = usePcbViewStore((s) => s.reorderLayer);
+  const projectId = useProjectStore((s) => s.projectId);
+  const fetchImpl = fetcher ?? globalThis.fetch.bind(globalThis);
 
   const handleDragStart = useCallback(
     (e: React.DragEvent<HTMLLIElement>, id: number) => {
@@ -58,15 +73,56 @@ export function LayerStack({ className, height }: LayerStackProps) {
   }, []);
 
   const handleDrop = useCallback(
-    (e: React.DragEvent<HTMLLIElement>, targetId: number) => {
+    async (e: React.DragEvent<HTMLLIElement>, targetId: number) => {
       e.preventDefault();
       const raw = e.dataTransfer.getData("application/x-kiclaude-layer-id");
       const sourceId = Number.parseInt(raw, 10);
-      if (Number.isFinite(sourceId)) {
-        reorderLayer(sourceId, targetId);
+      if (!Number.isFinite(sourceId)) return;
+      const moved = reorderLayer(sourceId, targetId);
+      if (!moved || !projectId) return;
+      // Server round-trip: persist the new order to .kicad_pro so a
+      // reload keeps it. We fire-and-forget — the store-side reorder
+      // already ran; the server is just informed.
+      try {
+        await fetchImpl(
+          `${apiBase}/ui_layer_reorder/${encodeURIComponent(projectId)}`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              args: { layer_id: sourceId, target_id: targetId },
+            }),
+          },
+        );
+      } catch {
+        // Network failure shouldn't roll back the local move — the
+        // user can re-drag if persistence is genuinely required.
       }
     },
-    [reorderLayer],
+    [apiBase, fetchImpl, projectId, reorderLayer],
+  );
+
+  const handleColorChange = useCallback(
+    async (id: number, hex: string) => {
+      setLayerColor(id, hex);
+      if (!projectId) return;
+      try {
+        await fetchImpl(
+          `${apiBase}/ui_layer_color_set/${encodeURIComponent(projectId)}`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              args: { layer_id: id, color: hex },
+            }),
+          },
+        );
+      } catch {
+        // Same policy as reorder — keep the local change visible
+        // even if the server is unreachable.
+      }
+    },
+    [apiBase, fetchImpl, projectId, setLayerColor],
   );
 
   if (layers.length === 0) {
@@ -100,6 +156,8 @@ export function LayerStack({ className, height }: LayerStackProps) {
         {layers.map((layer) => {
           const view = getLayerView({ layerView }, layer.id);
           const isActive = activeLayerId === layer.id;
+          const persistedColor = layerColors[layer.id];
+          const effectiveColor = persistedColor ?? layerColour(layer);
           return (
             <li
               key={layer.id}
@@ -109,7 +167,9 @@ export function LayerStack({ className, height }: LayerStackProps) {
               draggable
               onDragStart={(e) => handleDragStart(e, layer.id)}
               onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, layer.id)}
+              onDrop={(e) => {
+                void handleDrop(e, layer.id);
+              }}
               role="option"
               aria-selected={isActive}
               style={rowStyle(isActive)}
@@ -120,7 +180,24 @@ export function LayerStack({ className, height }: LayerStackProps) {
                 style={activeButtonStyle(isActive, layer)}
                 title={`${layer.name} (${layer.kind})`}
               >
-                <span style={{ ...colourDotStyle, background: layerColour(layer) }} />
+                <label
+                  style={{ ...colourDotStyle, background: effectiveColor }}
+                  onClick={(e) => e.stopPropagation()}
+                  data-testid="layer-color-swatch"
+                  title={`${layer.name} colour`}
+                >
+                  <input
+                    type="color"
+                    value={hexFromCssColour(effectiveColor)}
+                    onChange={(e) => {
+                      void handleColorChange(layer.id, e.target.value);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label={`Pick colour for ${layer.name}`}
+                    data-testid="layer-color-picker"
+                    style={colourPickerInputStyle}
+                  />
+                </label>
                 <span style={{ flex: 1, textAlign: "left" }}>{layer.name}</span>
                 <span style={kindBadgeStyle}>{layer.kind}</span>
               </button>
@@ -259,13 +336,53 @@ function activeButtonStyle(
 }
 
 const colourDotStyle: React.CSSProperties = {
-  width: 12,
-  height: 12,
+  width: 14,
+  height: 14,
   borderRadius: 3,
-  display: "inline-block",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
   border: "1px solid rgba(255,255,255,0.15)",
   flex: "0 0 auto",
+  cursor: "pointer",
+  position: "relative",
+  overflow: "hidden",
 };
+
+const colourPickerInputStyle: React.CSSProperties = {
+  // Stretch the native colour input across the swatch so the entire
+  // dot acts as the trigger, but keep it invisible — the swatch
+  // surface itself communicates the chosen colour.
+  position: "absolute",
+  inset: 0,
+  width: "100%",
+  height: "100%",
+  opacity: 0,
+  border: "none",
+  padding: 0,
+  cursor: "pointer",
+  background: "transparent",
+};
+
+/** Normalise an HSL/CSS-named/hex colour to the `#rrggbb` shape that
+ *  the native `<input type="color">` requires. Falls back to a safe
+ *  black on parse failure so the picker can still open. */
+function hexFromCssColour(value: string): string {
+  if (/^#[0-9a-fA-F]{6}$/.test(value)) return value.toLowerCase();
+  if (typeof document === "undefined") return "#000000";
+  // Cheap browser-resident parser: assign to a div's style and read
+  // the computed `getComputedStyle` colour (returns `rgb(...)`).
+  const probe = document.createElement("div");
+  probe.style.color = value;
+  document.body.appendChild(probe);
+  const rgb = getComputedStyle(probe).color;
+  document.body.removeChild(probe);
+  const m = /rgba?\((\d+)[, ]+(\d+)[, ]+(\d+)/.exec(rgb);
+  if (!m) return "#000000";
+  const toHex = (n: string) =>
+    Number.parseInt(n, 10).toString(16).padStart(2, "0");
+  return `#${toHex(m[1]!)}${toHex(m[2]!)}${toHex(m[3]!)}`.toLowerCase();
+}
 
 const kindBadgeStyle: React.CSSProperties = {
   fontSize: 10,

@@ -77,24 +77,75 @@ describe("pcbViewStore", () => {
     expect(usePcbViewStore.getState().layerView[0]?.opacity).toBe(0.42);
   });
 
-  it("reorderLayer moves a layer to a target slot", () => {
+  it("reorderLayer refuses to move when F.Cu or B.Cu would be involved (KiCad stackup anchors)", () => {
     usePcbViewStore.getState().setLayers(sampleLayers);
-    usePcbViewStore.getState().reorderLayer(0, 37);
+    // Moving F.Cu off slot 0 should fail.
+    expect(usePcbViewStore.getState().reorderLayer(0, 37)).toBe(false);
+    // Moving onto B.Cu (id 31) should also fail.
+    expect(usePcbViewStore.getState().reorderLayer(37, 31)).toBe(false);
     expect(
       usePcbViewStore.getState().layers.map((l) => l.id),
-    ).toEqual([31, 37, 0, 44]);
+    ).toEqual([0, 31, 37, 44]);
+  });
+
+  it("reorderLayer refuses cross-kind moves (silkscreen can't slot between copper)", () => {
+    // Build a stack with two inner copper layers to give a legal move
+    // before testing the refusal.
+    const withInners = [
+      { id: 0, name: "F.Cu", kind: "copper" },
+      { id: 1, name: "In1.Cu", kind: "copper" },
+      { id: 2, name: "In2.Cu", kind: "copper" },
+      { id: 31, name: "B.Cu", kind: "copper" },
+      { id: 37, name: "F.SilkS", kind: "silkscreen" },
+    ];
+    usePcbViewStore.getState().setLayers(withInners);
+    // Silk → copper: refused.
+    expect(usePcbViewStore.getState().reorderLayer(37, 1)).toBe(false);
+    // Inner copper swap (same kind, neither is F.Cu/B.Cu): allowed.
+    expect(usePcbViewStore.getState().reorderLayer(1, 2)).toBe(true);
+    expect(
+      usePcbViewStore.getState().layers.map((l) => l.id),
+    ).toEqual([0, 2, 1, 31, 37]);
   });
 
   it("reorderLayer is a no-op when moving onto itself or onto an unknown id", () => {
     usePcbViewStore.getState().setLayers(sampleLayers);
-    usePcbViewStore.getState().reorderLayer(0, 0);
+    expect(usePcbViewStore.getState().reorderLayer(37, 37)).toBe(false);
+    expect(usePcbViewStore.getState().reorderLayer(37, 9999)).toBe(false);
     expect(
       usePcbViewStore.getState().layers.map((l) => l.id),
     ).toEqual([0, 31, 37, 44]);
-    usePcbViewStore.getState().reorderLayer(0, 9999);
-    expect(
-      usePcbViewStore.getState().layers.map((l) => l.id),
-    ).toEqual([0, 31, 37, 44]);
+  });
+
+  it("setLayerColor stores normalised hex strings and rejects malformed input", () => {
+    usePcbViewStore.getState().setLayers(sampleLayers);
+    usePcbViewStore.getState().setLayerColor(0, "#FF8800");
+    expect(usePcbViewStore.getState().layerColors[0]).toBe("#ff8800");
+    // Invalid input is ignored (no throw, no overwrite).
+    usePcbViewStore.getState().setLayerColor(0, "not-a-colour");
+    expect(usePcbViewStore.getState().layerColors[0]).toBe("#ff8800");
+    usePcbViewStore.getState().setLayerColor(0, "#zzzzzz");
+    expect(usePcbViewStore.getState().layerColors[0]).toBe("#ff8800");
+  });
+
+  it("setLayerColors bulk-replaces and filters malformed entries", () => {
+    usePcbViewStore.getState().setLayers(sampleLayers);
+    usePcbViewStore.getState().setLayerColors({
+      0: "#abcdef",
+      31: "not-a-hex",
+      "37": "#112233",
+    } as unknown as Record<number, string>);
+    const colours = usePcbViewStore.getState().layerColors;
+    expect(colours[0]).toBe("#abcdef");
+    expect(colours[31]).toBeUndefined();
+    expect(colours[37]).toBe("#112233");
+  });
+
+  it("setLayers preserves per-layer colour overrides across reloads", () => {
+    usePcbViewStore.getState().setLayers(sampleLayers);
+    usePcbViewStore.getState().setLayerColor(31, "#abcdef");
+    usePcbViewStore.getState().setLayers(sampleLayers);
+    expect(usePcbViewStore.getState().layerColors[31]).toBe("#abcdef");
   });
 
   it("getLayerView falls back to defaults for unknown ids", () => {

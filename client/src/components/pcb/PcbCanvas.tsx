@@ -93,7 +93,13 @@ export function PcbCanvas(props: PcbCanvasProps) {
   // → pcbViewStore handoff; downstream components subscribe to
   // pcbViewStore only.
   const projectLayers = useProjectStore((s) => s.project?.pcb.layers ?? null);
+  const projectLayerColors = useProjectStore(
+    (s) =>
+      (s.project?.pcb as { layer_colors?: Record<string, string> } | undefined)
+        ?.layer_colors ?? null,
+  );
   const setLayers = usePcbViewStore((s) => s.setLayers);
+  const setLayerColors = usePcbViewStore((s) => s.setLayerColors);
   const cycleActiveLayer = usePcbViewStore((s) => s.cycleActiveLayer);
   const clearSelection = useSelectionStore((s) => s.clear);
 
@@ -106,6 +112,22 @@ export function PcbCanvas(props: PcbCanvasProps) {
       projectLayers.map((l) => ({ id: l.id, name: l.name, kind: l.kind })),
     );
   }, [projectLayers, setLayers]);
+
+  useEffect(() => {
+    if (!projectLayerColors) {
+      setLayerColors({});
+      return;
+    }
+    // Project file carries `{layer_id_string: "#rrggbb"}`; the store
+    // wants numeric keys. Convert here so all downstream subscribers
+    // see numeric ids exclusively.
+    const normalized: Record<number, string> = {};
+    for (const [k, v] of Object.entries(projectLayerColors)) {
+      const id = Number.parseInt(k, 10);
+      if (Number.isFinite(id)) normalized[id] = v;
+    }
+    setLayerColors(normalized);
+  }, [projectLayerColors, setLayerColors]);
 
   // PgUp/PgDn → cycle active layer. Bind to the container so the
   // hotkeys work whenever the editor has focus. The ref attaches
