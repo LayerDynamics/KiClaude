@@ -208,6 +208,18 @@ importers:
         specifier: ~6.0.2
         version: 6.0.3
 
+  tests/perf:
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.55.0
+        version: 1.60.0
+      '@types/node':
+        specifier: ^24.12.3
+        version: 24.12.4
+      typescript:
+        specifier: ~6.0.2
+        version: 6.0.3
+
 packages:
 
   '@axe-core/playwright@4.11.3':

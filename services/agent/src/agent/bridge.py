@@ -25,6 +25,7 @@ from agent.hooks import (
     session_end,
     session_start,
 )
+from agent.subagents import all_subagents
 
 
 def _kc_mcp_config() -> dict[str, Any]:
@@ -80,6 +81,10 @@ def build_options(
         hooks=hooks,
         setting_sources=setting_sources or ["project"],
         cwd=str(_project_root()),
+        # M3-C-08: register the three M3-P-07 subagents so /pcb-review
+        # and /explore-placements can spawn them through the SDK's
+        # native dispatch surface.
+        agents=all_subagents(),
     )
 
 
