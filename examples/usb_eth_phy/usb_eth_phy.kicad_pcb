@@ -1,0 +1,39 @@
+(kicad_pcb (version 20240108) (generator kiclaude)
+
+  (general
+    (thickness 1.6)
+  )
+
+  (paper "A4")
+  (layers
+    (0 "F.Cu" signal)
+    (31 "B.Cu" signal)
+    (44 "Edge.Cuts" user)
+  )
+
+  (setup
+    (pad_to_mask_clearance 0.0)
+  )
+
+  (net 0 "")
+  (net 1 "GND")
+  (net 2 "+3V3")
+  (net 3 "+5V")
+  (net 4 "+VBUS")
+  (net 5 "USB_D+")
+  (net 6 "USB_D-")
+  (net 7 "MDIO_TRD0+")
+  (net 8 "MDIO_TRD0-")
+  (net 9 "MDIO_TRD1+")
+  (net 10 "MDIO_TRD1-")
+  (net 11 "MDIO_TRD2+")
+  (net 12 "MDIO_TRD2-")
+  (net 13 "MDIO_TRD3+")
+  (net 14 "MDIO_TRD3-")
+  (net 15 "PHY_CLK_25M")
+
+  (gr_line (start 0.0 0.0) (end 80.0 0.0) (stroke (width 0.05) (type default)) (layer "Edge.Cuts") (uuid ""))
+  (gr_line (start 80.0 0.0) (end 80.0 60.0) (stroke (width 0.05) (type default)) (layer "Edge.Cuts") (uuid ""))
+  (gr_line (start 80.0 60.0) (end 0.0 60.0) (stroke (width 0.05) (type default)) (layer "Edge.Cuts") (uuid ""))
+  (gr_line (start 0.0 60.0) (end 0.0 0.0) (stroke (width 0.05) (type default)) (layer "Edge.Cuts") (uuid ""))
+)

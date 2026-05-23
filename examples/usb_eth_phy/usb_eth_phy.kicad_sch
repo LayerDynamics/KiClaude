@@ -1,0 +1,16 @@
+(kicad_sch (version 20240108) (generator "kiclaude") (generator_version "0.1")
+  (uuid "abcd0001-0000-4000-a000-000000000001")
+  (paper "A4")
+  (title_block
+    (title "usb_eth_phy")
+    (date "")
+    (rev "0.1")
+    (company "")
+    (comment 1 "M3 high-speed demo: USB 2.0 (90 ohm Zdiff) + 100BASE-T Ethernet PHY (100 ohm Zdiff)")
+  )
+  (lib_symbols
+  )
+  (sheet_instances
+    (path "/" (page "1"))
+  )
+)

@@ -1,0 +1,111 @@
+{
+  "board": {
+    "design_settings": {
+      "defaults": {
+        "board_outline_line_width": 0.05,
+        "copper_line_width": 0.2,
+        "silk_line_width": 0.1
+      },
+      "rules": {
+        "min_clearance": 0.15,
+        "min_track_width": 0.15,
+        "min_via_diameter": 0.45,
+        "min_via_drill": 0.3
+      }
+    },
+    "layer_pairs": [],
+    "layer_presets": [],
+    "viewports": []
+  },
+  "boards": [],
+  "libraries": {
+    "pinned_footprint_libs": ["MCU_ST_STM32F4", "Package_QFP", "Audio"],
+    "pinned_symbol_libs": ["MCU_ST_STM32F4", "Audio", "Device"]
+  },
+  "meta": {
+    "filename": "stm32_audio.kicad_pro",
+    "generator": "kiclaude",
+    "version": 3
+  },
+  "net_settings": {
+    "classes": [
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "name": "Default",
+        "priority": 2147483647,
+        "track_width": 0.25,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.3,
+        "diff_pair_gap": 0,
+        "diff_pair_width": 0,
+        "line_style": 0,
+        "name": "AnalogAudio",
+        "priority": 100,
+        "track_width": 0.4,
+        "via_diameter": 0.8,
+        "via_drill": 0.4,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.3,
+        "diff_pair_gap": 0,
+        "diff_pair_width": 0,
+        "line_style": 0,
+        "name": "Power",
+        "priority": 50,
+        "track_width": 0.5,
+        "via_diameter": 0.8,
+        "via_drill": 0.4,
+        "wire_width": 6
+      }
+    ],
+    "meta": { "version": 5 },
+    "net_colors": null,
+    "netclass_assignments": null,
+    "netclass_patterns": [
+      { "netclass": "AnalogAudio", "pattern": "AUDIO_*" },
+      { "netclass": "AnalogAudio", "pattern": "+VAA" },
+      { "netclass": "Power", "pattern": "+3V3" },
+      { "netclass": "Power", "pattern": "+5V" },
+      { "netclass": "Power", "pattern": "GND" }
+    ]
+  },
+  "pcbnew": {
+    "last_paths": {
+      "idf": "",
+      "netlist": "",
+      "plot": "",
+      "specctra_dsn": "",
+      "vrml": ""
+    },
+    "page_layout_descr_file": ""
+  },
+  "schematic": {
+    "bus_aliases": {},
+    "legacy_lib_dir": "",
+    "legacy_lib_list": [],
+    "page_layout_descr_file": "",
+    "top_level_sheets": [
+      {
+        "filename": "stm32_audio.kicad_sch",
+        "name": "stm32_audio",
+        "uuid": "abcd0000-0000-4000-a000-000000000001"
+      }
+    ]
+  },
+  "sheets": [],
+  "text_variables": {
+    "BOARD": "stm32_audio",
+    "GENERATOR": "kiclaude"
+  }
+}

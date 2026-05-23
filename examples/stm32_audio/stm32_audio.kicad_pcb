@@ -1,0 +1,34 @@
+(kicad_pcb (version 20240108) (generator kiclaude)
+
+  (general
+    (thickness 1.6)
+  )
+
+  (paper "A4")
+  (layers
+    (0 "F.Cu" signal)
+    (31 "B.Cu" signal)
+    (44 "Edge.Cuts" user)
+  )
+
+  (setup
+    (pad_to_mask_clearance 0.0)
+  )
+
+  (net 0 "")
+  (net 1 "GND")
+  (net 2 "+3V3")
+  (net 3 "+5V")
+  (net 4 "+VAA")
+  (net 5 "AUDIO_L")
+  (net 6 "AUDIO_R")
+  (net 7 "I2S_SCK")
+  (net 8 "I2S_WS")
+  (net 9 "I2S_SD")
+  (net 10 "I2S_MCLK")
+
+  (gr_line (start 0.0 0.0) (end 60.0 0.0) (stroke (width 0.05) (type default)) (layer "Edge.Cuts") (uuid ""))
+  (gr_line (start 60.0 0.0) (end 60.0 50.0) (stroke (width 0.05) (type default)) (layer "Edge.Cuts") (uuid ""))
+  (gr_line (start 60.0 50.0) (end 0.0 50.0) (stroke (width 0.05) (type default)) (layer "Edge.Cuts") (uuid ""))
+  (gr_line (start 0.0 50.0) (end 0.0 0.0) (stroke (width 0.05) (type default)) (layer "Edge.Cuts") (uuid ""))
+)

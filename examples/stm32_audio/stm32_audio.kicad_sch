@@ -1,0 +1,16 @@
+(kicad_sch (version 20240108) (generator "kiclaude") (generator_version "0.1")
+  (uuid "abcd0000-0000-4000-a000-000000000001")
+  (paper "A4")
+  (title_block
+    (title "stm32_audio")
+    (date "")
+    (rev "0.1")
+    (company "")
+    (comment 1 "M3 mixed-signal demo: STM32F411 + I2S DAC + audio amp")
+  )
+  (lib_symbols
+  )
+  (sheet_instances
+    (path "/" (page "1"))
+  )
+)
