@@ -288,6 +288,46 @@ async def project_snapshots(project_id: str) -> dict[str, Any]:
     }
 
 
+@app.get("/project/{project_id}/dfm/check")
+async def project_dfm_check(
+    project_id: str, target: str = "generic"
+) -> dict[str, Any]:
+    """Pre-flight DFM dry-run for the M2-T-09 fab export dialog.
+
+    Runs `dfm.run_dfm_check` against the in-memory project for the
+    chosen board-house preset. Returns
+    `{ok, target, issues:[...], counts:{error, warning}}`. The
+    `ok` flag is `True` iff there are no error-severity findings —
+    the export dialog gates the `Export` button on it.
+    """
+    from kiserver.dfm import known_targets, run_dfm_check
+
+    opened = REGISTRY.get(project_id)
+    if opened is None:
+        raise HTTPException(
+            status_code=404, detail=f"unknown project_id: {project_id}"
+        )
+    target_lower = (target or "generic").lower()
+    if target_lower not in known_targets():
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"unknown fab target {target!r}; "
+                f"choose from {known_targets()}"
+            ),
+        )
+    return run_dfm_check(opened.project, target_lower)
+
+
+@app.get("/dfm/targets")
+async def dfm_targets() -> dict[str, Any]:
+    """Enumerate the supported fab targets so the M2-T-09 dialog
+    can render the selector without hard-coding the list."""
+    from kiserver.dfm import known_targets
+
+    return {"ok": True, "targets": known_targets()}
+
+
 @app.post("/project/{project_id}/replace")
 async def project_replace(project_id: str, req: ReplaceRequest) -> dict[str, Any]:
     """Swap the stored KCIR for a (typically mutated) one.
