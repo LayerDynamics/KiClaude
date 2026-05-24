@@ -8,24 +8,29 @@ import type {
   BomPolicy,
   Bus,
   DesignRules,
+  DiffPair,
   Drawing,
   FabTarget,
   FabTargetPreset,
+  FootprintCourtyard,
   FootprintInstance,
   Junction,
   Label,
   LabelKind,
   Layer,
   LayerRef,
+  LengthGroup,
   LibSymbol,
   LibraryEntry,
   LibraryTable,
+  Model3D,
   Net,
   NetClass,
   NetClassRef,
   NetRef,
   NoConnect,
   Outline,
+  Pad,
   PadRef,
   Pcb,
   Project,
@@ -77,8 +82,10 @@ describe("kcir/index.ts barrel", () => {
   it("finds the full KCIR file set on disk", () => {
     // Sanity-check the discovery — if this number ever changes the
     // ts-rs generator added or dropped a type and the rest of this
-    // file needs auditing.
-    expect(files.length).toBe(38);
+    // file needs auditing. Last bumped 2026-05-23 by M3-T-03 (TS
+    // bindings resync added DiffPair, LengthGroup, FootprintCourtyard,
+    // Model3D, Pad — five new types).
+    expect(files.length).toBe(43);
   });
 
   it.each(files)("index.ts re-exports %s", (filename) => {
@@ -249,6 +256,11 @@ describe("FootprintInstance", () => {
     position_mm: [50, 50],
     rotation_deg: 0,
     locked: false,
+    attributes: [],
+    pads: [],
+    courtyard: null,
+    models_3d: [],
+    drawings: [],
   };
   it("has every documented key", () => {
     assertKeys(fx, [
@@ -261,6 +273,11 @@ describe("FootprintInstance", () => {
       "position_mm",
       "rotation_deg",
       "locked",
+      "attributes",
+      "pads",
+      "courtyard",
+      "models_3d",
+      "drawings",
     ]);
   });
 });
@@ -447,6 +464,8 @@ describe("Pcb", () => {
       thickness_mm: 1.6,
       paper: "A4",
       pad_to_mask_clearance_mm: 0.0,
+      solder_mask_min_width_mm: 0.0,
+      net_classes: [],
       layers: [{ id: 0, name: "F.Cu", kind: "signal", purpose: "user" }],
       footprints: [],
       tracks: [],
@@ -455,6 +474,8 @@ describe("Pcb", () => {
       outline: { points_mm: [], cutouts: [] },
       drawings: [],
       nets: [],
+      diff_pairs: [],
+      length_groups: [],
     };
     assertKeys(fx, [
       "version",
@@ -462,6 +483,8 @@ describe("Pcb", () => {
       "thickness_mm",
       "paper",
       "pad_to_mask_clearance_mm",
+      "solder_mask_min_width_mm",
+      "net_classes",
       "layers",
       "footprints",
       "tracks",
@@ -470,6 +493,8 @@ describe("Pcb", () => {
       "outline",
       "drawings",
       "nets",
+      "diff_pairs",
+      "length_groups",
     ]);
   });
 });
@@ -657,6 +682,90 @@ describe("Stackup / StackupLayer / StackupLayerKind", () => {
     ]);
   });
 
+  it("DiffPair has every documented key (M3-R-07)", () => {
+    const fx: DiffPair = {
+      name: "USB_D",
+      net_positive: "USB_D+",
+      net_negative: "USB_D-",
+      target_impedance_ohms: 90,
+      target_gap_mm: 0.127,
+      length_group: "USB",
+      skew_tolerance_mm: 0.127,
+    };
+    assertKeys(fx, [
+      "name",
+      "net_positive",
+      "net_negative",
+      "target_impedance_ohms",
+      "target_gap_mm",
+      "length_group",
+      "skew_tolerance_mm",
+    ]);
+  });
+
+  it("LengthGroup has every documented key (M3-R-07)", () => {
+    const fx: LengthGroup = {
+      name: "DDR3_DQ_BYTE0",
+      nets: ["DQ0", "DQ1", "DQ2", "DQ3", "DQS0_P", "DQS0_N"],
+      target_length_mm: 0,
+      tolerance_mm: 0.127,
+    };
+    assertKeys(fx, ["name", "nets", "target_length_mm", "tolerance_mm"]);
+  });
+
+  it("FootprintCourtyard has every documented key", () => {
+    const fx: FootprintCourtyard = {
+      layer: "F.CrtYd",
+      points_mm: [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 1],
+      ],
+      width_mm: 0.05,
+    };
+    assertKeys(fx, ["layer", "points_mm", "width_mm"]);
+  });
+
+  it("Model3D has every documented key", () => {
+    const fx: Model3D = {
+      path: "${KICAD9_3DMODEL_DIR}/Resistor_SMD.3dshapes/R_0603.step",
+      offset_mm: [0, 0, 0],
+      scale: [1, 1, 1],
+      rotate_deg: [0, 0, 0],
+    };
+    assertKeys(fx, ["path", "offset_mm", "scale", "rotate_deg"]);
+  });
+
+  it("Pad has every documented key", () => {
+    const fx: Pad = {
+      number: "1",
+      pad_type: "smd",
+      shape: "roundrect",
+      position_mm: [0, 0],
+      rotation_deg: 0,
+      size_mm: [1.5, 0.8],
+      drill_mm: null,
+      layers: ["F.Cu", "F.Mask"],
+      net: "GND",
+      roundrect_rratio: 0.25,
+      uuid: "ffffffff-ffff-ffff-ffff-fffffffffff0",
+    };
+    assertKeys(fx, [
+      "number",
+      "pad_type",
+      "shape",
+      "position_mm",
+      "rotation_deg",
+      "size_mm",
+      "drill_mm",
+      "layers",
+      "net",
+      "roundrect_rratio",
+      "uuid",
+    ]);
+  });
+
   it("Stackup has every documented key", () => {
     const fx: Stackup = {
       layers: [layer],
@@ -686,8 +795,9 @@ describe("Track / Via / Wire / Zone", () => {
         [20, 10],
       ],
       width_mm: 0.25,
+      locked: false,
     };
-    assertKeys(fx, ["uuid", "layer", "net", "points_mm", "width_mm"]);
+    assertKeys(fx, ["uuid", "layer", "net", "points_mm", "width_mm", "locked"]);
   });
   it("Via has every documented key", () => {
     const fx: Via = {
@@ -698,6 +808,8 @@ describe("Track / Via / Wire / Zone", () => {
       to_layer: "B.Cu",
       drill_mm: 0.3,
       diameter_mm: 0.6,
+      kind: "",
+      locked: false,
     };
     assertKeys(fx, [
       "uuid",
@@ -707,6 +819,8 @@ describe("Track / Via / Wire / Zone", () => {
       "to_layer",
       "drill_mm",
       "diameter_mm",
+      "kind",
+      "locked",
     ]);
   });
   it("Wire has every documented key", () => {
@@ -730,9 +844,31 @@ describe("Track / Via / Wire / Zone", () => {
         [10, 0],
         [10, 10],
       ],
+      cutouts_mm: [],
+      hatched: false,
+      clearance_mm: 0,
       thermal_relief: true,
+      thermal_gap_mm: 0.5,
+      thermal_bridge_width_mm: 0.3,
+      min_thickness_mm: 0.2,
+      connect_pads: "yes",
+      filled_polygons: [],
     };
-    assertKeys(fx, ["uuid", "layer", "net", "outline_mm", "thermal_relief"]);
+    assertKeys(fx, [
+      "uuid",
+      "layer",
+      "net",
+      "outline_mm",
+      "cutouts_mm",
+      "hatched",
+      "clearance_mm",
+      "thermal_relief",
+      "thermal_gap_mm",
+      "thermal_bridge_width_mm",
+      "min_thickness_mm",
+      "connect_pads",
+      "filled_polygons",
+    ]);
   });
 });
 
@@ -824,6 +960,10 @@ describe("examples/blinky round-trip", () => {
         thickness_mm: 1.6,
         paper: "A4",
         pad_to_mask_clearance_mm: 0,
+        solder_mask_min_width_mm: 0,
+        net_classes: [],
+        diff_pairs: [],
+        length_groups: [],
         layers: [
           { id: 0, name: "F.Cu", kind: "signal", purpose: "user" },
           { id: 31, name: "B.Cu", kind: "signal", purpose: "user" },
@@ -840,6 +980,11 @@ describe("examples/blinky round-trip", () => {
             position_mm: [50, 50],
             rotation_deg: 0,
             locked: false,
+            attributes: [],
+            pads: [],
+            courtyard: null,
+            models_3d: [],
+            drawings: [],
           },
           {
             uuid: "5c7e0a3e-4f9b-4ddc-9b3d-0001000000c1",
@@ -851,6 +996,11 @@ describe("examples/blinky round-trip", () => {
             position_mm: [70, 50],
             rotation_deg: 0,
             locked: false,
+            attributes: [],
+            pads: [],
+            courtyard: null,
+            models_3d: [],
+            drawings: [],
           },
         ],
         tracks: [],

@@ -93,7 +93,7 @@ describe("/api/ui/<tool>/<project_id>", () => {
     expect(res.status).toBe(400);
   });
 
-  it("exposes the expected schematic (5) + PCB (11) UI tools on the allowlist", () => {
+  it("exposes the expected schematic (5) + PCB (13) UI tools on the allowlist", () => {
     expect([...ALLOWED_UI_TOOLS].sort()).toEqual([
       // M1-P-05 schematic UI tools.
       "ui_junction_place_xy",
@@ -117,6 +117,9 @@ describe("/api/ui/<tool>/<project_id>", () => {
       "ui_layer_reorder",
       // M3-T-01 stackup editor.
       "ui_stackup_set",
+      // M3-T-03 diff-pair declaration panel.
+      "ui_diffpair_set",
+      "ui_diffpair_delete",
     ].sort());
   });
 });

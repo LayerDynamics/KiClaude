@@ -1132,3 +1132,183 @@ def test_ui_stackup_set_nullable_dielectric_fields_round_trip() -> None:
     di = result["stackup"]["layers"][1]
     assert di["dielectric_constant"] == 4.5
     assert di["loss_tangent"] == 0.02
+
+
+# ---------------------------------------------------------------------
+# M3-T-03 — Diff pair declaration panel (ui_diffpair_set / delete).
+# ---------------------------------------------------------------------
+
+
+def _usb_diffpair_project() -> dict[str, Any]:
+    return {
+        "pcb": {
+            "diff_pairs": [],
+            "nets": [
+                {"name": "USB_D+"},
+                {"name": "USB_D-"},
+                {"name": "USB_VBUS"},
+                {"name": "GND"},
+            ],
+        }
+    }
+
+
+def test_ui_diffpair_set_creates_pair_and_back_refs_into_nets() -> None:
+    from kc_mcp.ui_tools import ui_diffpair_set
+
+    project = _usb_diffpair_project()
+    result = ui_diffpair_set(
+        project,
+        name="USB_D",
+        net_positive="USB_D+",
+        net_negative="USB_D-",
+        target_impedance_ohms=90.0,
+        target_gap_mm=0.127,
+        length_group="USB",
+        skew_tolerance_mm=0.127,
+    )
+    assert result["ok"] is True
+    pair = result["diff_pair"]
+    assert pair["name"] == "USB_D"
+    assert pair["net_positive"] == "USB_D+"
+    assert pair["net_negative"] == "USB_D-"
+    assert pair["target_impedance_ohms"] == 90.0
+    assert pair["target_gap_mm"] == 0.127
+    assert pair["length_group"] == "USB"
+    assert pair["skew_tolerance_mm"] == 0.127
+    # Back-refs on the legs point at each other.
+    nets_by_name = {n["name"]: n for n in project["pcb"]["nets"]}
+    assert nets_by_name["USB_D+"]["diff_pair"] == "USB_D-"
+    assert nets_by_name["USB_D-"]["diff_pair"] == "USB_D+"
+    # Non-leg nets untouched.
+    assert "diff_pair" not in nets_by_name["USB_VBUS"]
+
+
+def test_ui_diffpair_set_upserts_in_place_by_name() -> None:
+    from kc_mcp.ui_tools import ui_diffpair_set
+
+    project = _usb_diffpair_project()
+    ui_diffpair_set(project, name="USB_D", net_positive="USB_D+", net_negative="USB_D-")
+    again = ui_diffpair_set(project, name="USB_D", target_impedance_ohms=85.0)
+    assert again["ok"] is True
+    assert len(project["pcb"]["diff_pairs"]) == 1
+    assert project["pcb"]["diff_pairs"][0]["target_impedance_ohms"] == 85.0
+
+
+def test_ui_diffpair_set_renaming_legs_clears_orphan_back_refs() -> None:
+    from kc_mcp.ui_tools import ui_diffpair_set
+
+    project = _usb_diffpair_project()
+    project["pcb"]["nets"].append({"name": "PCIE_TX0+"})
+    project["pcb"]["nets"].append({"name": "PCIE_TX0-"})
+    ui_diffpair_set(project, name="USB_D", net_positive="USB_D+", net_negative="USB_D-")
+    # Switch the same pair's legs to a different pair of nets.
+    result = ui_diffpair_set(
+        project, name="USB_D", net_positive="PCIE_TX0+", net_negative="PCIE_TX0-"
+    )
+    assert result["ok"] is True
+    nets_by_name = {n["name"]: n for n in project["pcb"]["nets"]}
+    # Old legs lost their back-ref.
+    assert nets_by_name["USB_D+"]["diff_pair"] is None
+    assert nets_by_name["USB_D-"]["diff_pair"] is None
+    # New legs have it.
+    assert nets_by_name["PCIE_TX0+"]["diff_pair"] == "PCIE_TX0-"
+    assert nets_by_name["PCIE_TX0-"]["diff_pair"] == "PCIE_TX0+"
+
+
+def test_ui_diffpair_set_requires_name() -> None:
+    from kc_mcp.ui_tools import ui_diffpair_set
+
+    result = ui_diffpair_set({"pcb": {}}, name="   ")
+    assert result["ok"] is False
+    assert "name" in result["error"]
+
+
+def test_ui_diffpair_set_create_requires_both_legs() -> None:
+    from kc_mcp.ui_tools import ui_diffpair_set
+
+    project = _usb_diffpair_project()
+    result = ui_diffpair_set(project, name="USB_D", net_positive="USB_D+")
+    assert result["ok"] is False
+    assert "required" in result["error"]
+    assert project["pcb"]["diff_pairs"] == []
+
+
+def test_ui_diffpair_set_rejects_unknown_net() -> None:
+    from kc_mcp.ui_tools import ui_diffpair_set
+
+    project = _usb_diffpair_project()
+    result = ui_diffpair_set(
+        project, name="USB_D", net_positive="USB_D+", net_negative="UNDEFINED_NET"
+    )
+    assert result["ok"] is False
+    assert "UNDEFINED_NET" in result["error"]
+    # No stray entry created.
+    assert project["pcb"]["diff_pairs"] == []
+
+
+def test_ui_diffpair_set_rejects_self_pair() -> None:
+    from kc_mcp.ui_tools import ui_diffpair_set
+
+    project = _usb_diffpair_project()
+    result = ui_diffpair_set(
+        project, name="X", net_positive="USB_D+", net_negative="USB_D+"
+    )
+    assert result["ok"] is False
+    assert "same net" in result["error"]
+    assert project["pcb"]["diff_pairs"] == []
+
+
+def test_ui_diffpair_set_rejects_double_booking_a_net() -> None:
+    from kc_mcp.ui_tools import ui_diffpair_set
+
+    project = _usb_diffpair_project()
+    project["pcb"]["nets"].append({"name": "OTHER+"})
+    ui_diffpair_set(project, name="USB_D", net_positive="USB_D+", net_negative="USB_D-")
+    # USB_D+ is already in USB_D — can't appear in a second pair.
+    result = ui_diffpair_set(
+        project, name="OTHER", net_positive="USB_D+", net_negative="OTHER+"
+    )
+    assert result["ok"] is False
+    assert "USB_D" in result["error"]
+    assert len(project["pcb"]["diff_pairs"]) == 1
+
+
+def test_ui_diffpair_set_rejects_negative_numeric() -> None:
+    from kc_mcp.ui_tools import ui_diffpair_set
+
+    project = _usb_diffpair_project()
+    result = ui_diffpair_set(
+        project,
+        name="USB_D",
+        net_positive="USB_D+",
+        net_negative="USB_D-",
+        target_impedance_ohms=-90.0,
+    )
+    assert result["ok"] is False
+    assert "target_impedance_ohms" in result["error"]
+    assert project["pcb"]["diff_pairs"] == []
+
+
+def test_ui_diffpair_delete_drops_pair_and_clears_back_refs() -> None:
+    from kc_mcp.ui_tools import ui_diffpair_delete, ui_diffpair_set
+
+    project = _usb_diffpair_project()
+    ui_diffpair_set(project, name="USB_D", net_positive="USB_D+", net_negative="USB_D-")
+    result = ui_diffpair_delete(project, name="USB_D")
+    assert result["ok"] is True
+    assert result["deleted"] == "USB_D"
+    assert set(result["cleared_back_refs"]) == {"USB_D+", "USB_D-"}
+    assert project["pcb"]["diff_pairs"] == []
+    nets_by_name = {n["name"]: n for n in project["pcb"]["nets"]}
+    assert nets_by_name["USB_D+"]["diff_pair"] is None
+    assert nets_by_name["USB_D-"]["diff_pair"] is None
+
+
+def test_ui_diffpair_delete_unknown_returns_error() -> None:
+    from kc_mcp.ui_tools import ui_diffpair_delete
+
+    project = _usb_diffpair_project()
+    result = ui_diffpair_delete(project, name="NoSuchPair")
+    assert result["ok"] is False
+    assert "NoSuchPair" in result["error"]

@@ -3,4 +3,16 @@
 /**
  * A board layer — copper, dielectric, soldermask, silkscreen, etc.
  */
-export type Layer = { id: number, name: string, kind: string, purpose: string, };
+export type Layer = { 
+/**
+ * `KiCad` layer id — 0 = F.Cu, 31 = B.Cu, 32+ = user / mask / paste.
+ */
+id: number, name: string, 
+/**
+ * `signal`, `power`, `mixed`, `jumper`, `user`.
+ */
+kind: string, 
+/**
+ * Optional display name (e.g. `"B.Adhesive"`).
+ */
+purpose: string, };

@@ -4,4 +4,8 @@ import type { LayerRef } from "./LayerRef";
 /**
  * A via connecting two or more copper layers.
  */
-export type Via = { uuid: string, net: string, position_mm: [number, number], from_layer: LayerRef, to_layer: LayerRef, drill_mm: number, diameter_mm: number, };
+export type Via = { uuid: string, net: string, position_mm: [number, number], from_layer: LayerRef, to_layer: LayerRef, drill_mm: number, diameter_mm: number, 
+/**
+ * `blind`, `buried`, or empty for through-hole.
+ */
+kind: string, locked: boolean, };

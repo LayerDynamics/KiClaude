@@ -44,6 +44,9 @@ export const ALLOWED_UI_TOOLS = [
   "ui_layer_reorder",
   // M3-T-01 stackup editor.
   "ui_stackup_set",
+  // M3-T-03 diff-pair declaration panel.
+  "ui_diffpair_set",
+  "ui_diffpair_delete",
 ] as const;
 export type AllowedUiTool = (typeof ALLOWED_UI_TOOLS)[number];
 

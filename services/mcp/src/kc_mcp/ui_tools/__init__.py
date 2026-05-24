@@ -12,6 +12,7 @@ guard in [`kc_mcp.server`] enforces this at boot.
 
 from __future__ import annotations
 
+from .diffpair_edit import ui_diffpair_delete, ui_diffpair_set
 from .footprint_move import ui_footprint_move
 from .footprint_xy import ui_footprint_place_xy
 from .junction_xy import ui_junction_place_xy
@@ -50,6 +51,9 @@ UI_TOOLS = {
     "ui_layer_reorder": ui_layer_reorder,
     # M3-T-01 extension — stackup editor (atomic replace).
     "ui_stackup_set": ui_stackup_set,
+    # M3-T-03 extension — diff-pair declaration panel.
+    "ui_diffpair_set": ui_diffpair_set,
+    "ui_diffpair_delete": ui_diffpair_delete,
 }
 
 
@@ -63,6 +67,8 @@ __all__ = [
     "ui_layer_reorder",
     "ui_netclass_delete",
     "ui_netclass_set",
+    "ui_diffpair_delete",
+    "ui_diffpair_set",
     "ui_outline_create_polygon",
     "ui_stackup_set",
     "ui_symbol_edit_props",

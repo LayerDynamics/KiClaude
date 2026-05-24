@@ -39,6 +39,23 @@ export interface KcirTrack {
   points_mm: Array<[number, number]>;
 }
 
+export interface KcirDiffPair {
+  name: string;
+  net_positive: string;
+  net_negative: string;
+  target_impedance_ohms: number;
+  target_gap_mm: number;
+  length_group: string;
+  skew_tolerance_mm: number;
+}
+
+export interface KcirLengthGroup {
+  name: string;
+  nets: string[];
+  target_length_mm: number;
+  tolerance_mm: number;
+}
+
 export interface KcirPcb {
   version: number;
   generator: string;
@@ -48,6 +65,12 @@ export interface KcirPcb {
   vias: unknown[];
   zones: unknown[];
   nets: KcirNet[];
+  /** M3-R-07 — declared differential pairs (`pcb.diff_pairs`). Edited
+   * via M3-T-03 `DiffPairPanel` → `ui_diffpair_set` / `_delete`. */
+  diff_pairs?: KcirDiffPair[];
+  /** M3-R-07 — declared length-match groups (`pcb.length_groups`).
+   * Driven by the M3-R-05 analyzer + M3-T-04 group manager. */
+  length_groups?: KcirLengthGroup[];
 }
 
 export interface KcirStackupLayer {

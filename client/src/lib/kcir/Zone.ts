@@ -4,4 +4,45 @@ import type { LayerRef } from "./LayerRef";
 /**
  * A copper zone (polygon pour) bound to a net.
  */
-export type Zone = { uuid: string, layer: LayerRef, net: string, outline_mm: Array<[number, number]>, thermal_relief: boolean, };
+export type Zone = { uuid: string, layer: LayerRef, net: string, 
+/**
+ * Outer outline points; cutouts hang off `cutouts_mm`.
+ */
+outline_mm: Array<[number, number]>, 
+/**
+ * Holes inside the zone outline (`KiCad` zones can have multiple).
+ */
+cutouts_mm: Array<Array<[number, number]>>, 
+/**
+ * True when the zone is hatched (Hatched / `Hatch_None`) — `KiCad`'s
+ * default is filled solid.
+ */
+hatched: boolean, 
+/**
+ * Net clearance override in mm (0 = inherit from net class).
+ */
+clearance_mm: number, 
+/**
+ * Minimum spoke width for thermal reliefs in mm.
+ */
+thermal_relief: boolean, 
+/**
+ * `(thermal_gap X) (thermal_bridge_width Y)` — only meaningful
+ * when `thermal_relief` is true.
+ */
+thermal_gap_mm: number, thermal_bridge_width_mm: number, 
+/**
+ * `(min_thickness X)` — minimum slot width inside the fill.
+ */
+min_thickness_mm: number, 
+/**
+ * `(connect_pads …)` mode — `yes`, `no`, `thru_hole_only`.
+ * Default `yes`.
+ */
+connect_pads: string, 
+/**
+ * Computed fill polygons (one or more — `KiCad` emits a separate
+ * `(filled_polygon …)` per disconnected region). M2-R-05 zone-fill
+ * populates these from the outline + obstacles.
+ */
+filled_polygons: Array<Array<[number, number]>>, };

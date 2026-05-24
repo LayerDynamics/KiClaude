@@ -4,4 +4,9 @@ import type { LayerRef } from "./LayerRef";
 /**
  * Non-conductive graphics: silkscreen, fab, courtyard.
  */
-export type Drawing = { uuid: string, layer: LayerRef, kind: string, points_mm: Array<[number, number]>, width_mm: number, text: string, };
+export type Drawing = { uuid: string, layer: LayerRef, 
+/**
+ * `gr_line`, `gr_arc`, `gr_rect`, `gr_circle`, `gr_text`,
+ * `fp_line`, `fp_text` (when inside a footprint).
+ */
+kind: string, points_mm: Array<[number, number]>, width_mm: number, text: string, };

@@ -4,4 +4,8 @@ import type { LayerRef } from "./LayerRef";
 /**
  * A copper track segment.
  */
-export type Track = { uuid: string, layer: LayerRef, net: string, points_mm: Array<[number, number]>, width_mm: number, };
+export type Track = { uuid: string, layer: LayerRef, net: string, points_mm: Array<[number, number]>, width_mm: number, 
+/**
+ * `true` when the track is marked `(locked)` in the source.
+ */
+locked: boolean, };
