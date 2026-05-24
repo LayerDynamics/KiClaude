@@ -949,3 +949,186 @@ def test_ui_zone_create_polygon_needs_three_points() -> None:
         project, net="GND", layer="F.Cu", outline_mm=[(0.0, 0.0), (1.0, 0.0)]
     )
     assert out["ok"] is False
+
+
+# ---------------------------------------------------------------------
+# M3-T-01 — Stackup editor (ui_stackup_set).
+# ---------------------------------------------------------------------
+
+
+def _four_layer_stackup() -> list[dict[str, Any]]:
+    """Canonical 4-layer FR-4 controlled-impedance stackup."""
+    return [
+        {"name": "F.Cu", "kind": "copper", "thickness_mm": 0.035,
+         "dielectric_constant": None, "loss_tangent": None, "color": "copper"},
+        {"name": "dielectric 1", "kind": "dielectric", "thickness_mm": 0.21,
+         "dielectric_constant": 4.5, "loss_tangent": 0.02, "color": "FR4"},
+        {"name": "In1.Cu", "kind": "copper", "thickness_mm": 0.018,
+         "dielectric_constant": None, "loss_tangent": None, "color": "copper"},
+        {"name": "dielectric 2", "kind": "dielectric", "thickness_mm": 1.10,
+         "dielectric_constant": 4.5, "loss_tangent": 0.02, "color": "FR4"},
+        {"name": "In2.Cu", "kind": "copper", "thickness_mm": 0.018,
+         "dielectric_constant": None, "loss_tangent": None, "color": "copper"},
+        {"name": "dielectric 3", "kind": "dielectric", "thickness_mm": 0.21,
+         "dielectric_constant": 4.5, "loss_tangent": 0.02, "color": "FR4"},
+        {"name": "B.Cu", "kind": "copper", "thickness_mm": 0.035,
+         "dielectric_constant": None, "loss_tangent": None, "color": "copper"},
+    ]
+
+
+def test_ui_stackup_set_replaces_payload_and_recomputes_board_thickness() -> None:
+    from kc_mcp.ui_tools import ui_stackup_set
+
+    project: dict[str, Any] = {"stackup": {
+        "layers": [], "power_plane_layers": [], "controlled_impedance": False,
+        "board_thickness_mm": 0.0, "finish": "",
+    }}
+    layers = _four_layer_stackup()
+    result = ui_stackup_set(
+        project,
+        layers=layers,
+        finish="ENIG",
+        controlled_impedance=True,
+    )
+    assert result["ok"] is True
+    new = result["stackup"]
+    assert [layer["name"] for layer in new["layers"]] == [
+        "F.Cu", "dielectric 1", "In1.Cu", "dielectric 2",
+        "In2.Cu", "dielectric 3", "B.Cu",
+    ]
+    assert new["finish"] == "ENIG"
+    assert new["controlled_impedance"] is True
+    # Board thickness sums layer thicknesses (KiCad invariant).
+    expected = 0.035 + 0.21 + 0.018 + 1.10 + 0.018 + 0.21 + 0.035
+    assert new["board_thickness_mm"] == pytest.approx(expected)
+    # Project was mutated in-place (matches the other ui_* tools).
+    assert project["stackup"] is new
+
+
+def test_ui_stackup_set_preserves_unspecified_fields() -> None:
+    """If the caller omits `finish` / `controlled_impedance` /
+    `power_plane_layers`, the current values stay — partial edits
+    are supported."""
+    from kc_mcp.ui_tools import ui_stackup_set
+
+    project: dict[str, Any] = {"stackup": {
+        "layers": [],
+        "power_plane_layers": ["In1.Cu"],
+        "controlled_impedance": True,
+        "board_thickness_mm": 0.0,
+        "finish": "HASL",
+    }}
+    result = ui_stackup_set(project, layers=_four_layer_stackup())
+    assert result["ok"] is True
+    new = result["stackup"]
+    assert new["finish"] == "HASL"
+    assert new["controlled_impedance"] is True
+    assert new["power_plane_layers"] == ["In1.Cu"]
+
+
+def test_ui_stackup_set_rejects_layers_missing() -> None:
+    from kc_mcp.ui_tools import ui_stackup_set
+
+    result = ui_stackup_set({"stackup": {}})
+    assert result["ok"] is False
+    assert "layers" in result["error"]
+
+
+def test_ui_stackup_set_rejects_non_list_layers() -> None:
+    from kc_mcp.ui_tools import ui_stackup_set
+
+    result = ui_stackup_set({"stackup": {}}, layers="not-a-list")  # type: ignore[arg-type]
+    assert result["ok"] is False
+    assert "list" in result["error"]
+
+
+def test_ui_stackup_set_rejects_unknown_kind() -> None:
+    from kc_mcp.ui_tools import ui_stackup_set
+
+    bad = [
+        {"name": "F.Cu", "kind": "copper", "thickness_mm": 0.035,
+         "dielectric_constant": None, "loss_tangent": None, "color": "copper"},
+        {"name": "magic", "kind": "graphene", "thickness_mm": 0.1,
+         "dielectric_constant": None, "loss_tangent": None, "color": ""},
+        {"name": "B.Cu", "kind": "copper", "thickness_mm": 0.035,
+         "dielectric_constant": None, "loss_tangent": None, "color": "copper"},
+    ]
+    result = ui_stackup_set({"stackup": {}}, layers=bad)
+    assert result["ok"] is False
+    assert "graphene" in result["error"]
+
+
+def test_ui_stackup_set_rejects_negative_thickness() -> None:
+    from kc_mcp.ui_tools import ui_stackup_set
+
+    bad = [
+        {"name": "F.Cu", "kind": "copper", "thickness_mm": -0.035,
+         "dielectric_constant": None, "loss_tangent": None, "color": "copper"},
+        {"name": "B.Cu", "kind": "copper", "thickness_mm": 0.035,
+         "dielectric_constant": None, "loss_tangent": None, "color": "copper"},
+    ]
+    result = ui_stackup_set({"stackup": {}}, layers=bad)
+    assert result["ok"] is False
+    assert "thickness_mm" in result["error"]
+
+
+def test_ui_stackup_set_rejects_duplicate_names() -> None:
+    from kc_mcp.ui_tools import ui_stackup_set
+
+    bad = [
+        {"name": "F.Cu", "kind": "copper", "thickness_mm": 0.035,
+         "dielectric_constant": None, "loss_tangent": None, "color": "copper"},
+        {"name": "F.Cu", "kind": "dielectric", "thickness_mm": 1.0,
+         "dielectric_constant": 4.5, "loss_tangent": 0.02, "color": "FR4"},
+        {"name": "B.Cu", "kind": "copper", "thickness_mm": 0.035,
+         "dielectric_constant": None, "loss_tangent": None, "color": "copper"},
+    ]
+    result = ui_stackup_set({"stackup": {}}, layers=bad)
+    assert result["ok"] is False
+    assert "duplicate" in result["error"].lower()
+
+
+def test_ui_stackup_set_rejects_wrong_copper_anchor() -> None:
+    """`F.Cu` must be the first copper layer, `B.Cu` the last —
+    matches KiCad's stack-manager invariant."""
+    from kc_mcp.ui_tools import ui_stackup_set
+
+    swapped = [
+        {"name": "B.Cu", "kind": "copper", "thickness_mm": 0.035,
+         "dielectric_constant": None, "loss_tangent": None, "color": "copper"},
+        {"name": "dielectric 1", "kind": "dielectric", "thickness_mm": 1.5,
+         "dielectric_constant": 4.5, "loss_tangent": 0.02, "color": "FR4"},
+        {"name": "F.Cu", "kind": "copper", "thickness_mm": 0.035,
+         "dielectric_constant": None, "loss_tangent": None, "color": "copper"},
+    ]
+    result = ui_stackup_set({"stackup": {}}, layers=swapped)
+    assert result["ok"] is False
+    assert "F.Cu" in result["error"]
+
+
+def test_ui_stackup_set_empty_layers_is_valid() -> None:
+    """An empty stackup is a substrate-only / unrouted panel — the
+    invariant only constrains copper layers, so zero coppers is fine."""
+    from kc_mcp.ui_tools import ui_stackup_set
+
+    result = ui_stackup_set({"stackup": {}}, layers=[], finish="")
+    assert result["ok"] is True
+    assert result["stackup"]["board_thickness_mm"] == 0.0
+
+
+def test_ui_stackup_set_nullable_dielectric_fields_round_trip() -> None:
+    """Copper layers carry `dielectric_constant = None` /
+    `loss_tangent = None`. These must survive the validator and end
+    up as `None` (not 0) in the persisted dict."""
+    from kc_mcp.ui_tools import ui_stackup_set
+
+    project: dict[str, Any] = {"stackup": {}}
+    result = ui_stackup_set(project, layers=_four_layer_stackup(), finish="HASL")
+    assert result["ok"] is True
+    cu = result["stackup"]["layers"][0]
+    assert cu["name"] == "F.Cu"
+    assert cu["dielectric_constant"] is None
+    assert cu["loss_tangent"] is None
+    di = result["stackup"]["layers"][1]
+    assert di["dielectric_constant"] == 4.5
+    assert di["loss_tangent"] == 0.02

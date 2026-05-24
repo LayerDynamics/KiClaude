@@ -50,12 +50,40 @@ export interface KcirPcb {
   nets: KcirNet[];
 }
 
+export interface KcirStackupLayer {
+  name: string;
+  /** One of `copper | dielectric | soldermask | silkscreen | paste | adhesive` —
+   * mirrors the KCIR `StackupLayerKind` enum in
+   * `crates/ki/src/kcir/stackup.rs`. */
+  kind: string;
+  thickness_mm: number;
+  dielectric_constant: number | null;
+  loss_tangent: number | null;
+  /** Material name for dielectrics (`"FR4"`) or render hint for copper
+   * (`"copper"`). Round-trips with KiCad's `(material …)` line. */
+  color: string;
+}
+
+export interface KcirStackup {
+  layers: KcirStackupLayer[];
+  power_plane_layers: string[];
+  controlled_impedance: boolean;
+  /** Sum of `layer.thickness_mm` — server-side recomputed on every
+   * `ui_stackup_set`; never set by the UI. */
+  board_thickness_mm: number;
+  /** `HASL`, `ENIG`, `OSP`, … — empty string when unset. */
+  finish: string;
+}
+
 export interface KcirProject {
   kcir_version: string;
   name: string;
   pcb: KcirPcb;
   metadata: KcirProjectMetadata;
   net_classes: Array<{ name: string; clearance_mm: number; trace_width_mm: number }>;
+  /** M3-R-01 stackup model — populated from the project's `.kicad_pcb`
+   * `(setup (stackup …))` block on load, edited via `ui_stackup_set`. */
+  stackup?: KcirStackup;
 }
 
 export type ProjectStatus = "idle" | "loading" | "ready" | "error";

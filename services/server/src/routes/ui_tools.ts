@@ -42,6 +42,8 @@ export const ALLOWED_UI_TOOLS = [
   // M2-T-08 layer panel finaliser — colour picker + physical reorder.
   "ui_layer_color_set",
   "ui_layer_reorder",
+  // M3-T-01 stackup editor.
+  "ui_stackup_set",
 ] as const;
 export type AllowedUiTool = (typeof ALLOWED_UI_TOOLS)[number];
 

@@ -19,6 +19,7 @@ from .label_xy import ui_label_place_xy
 from .layer_color import ui_layer_color_set, ui_layer_reorder
 from .netclass_edit import ui_netclass_delete, ui_netclass_set
 from .outline_polygon import ui_outline_create_polygon
+from .stackup_edit import ui_stackup_set
 from .symbol_edit import ui_symbol_edit_props
 from .symbol_xy import ui_symbol_place_xy
 from .track_points import ui_track_draw_points
@@ -47,6 +48,8 @@ UI_TOOLS = {
     # M2-T-08 extension — layer panel (colour picker + reorder).
     "ui_layer_color_set": ui_layer_color_set,
     "ui_layer_reorder": ui_layer_reorder,
+    # M3-T-01 extension — stackup editor (atomic replace).
+    "ui_stackup_set": ui_stackup_set,
 }
 
 
@@ -61,6 +64,7 @@ __all__ = [
     "ui_netclass_delete",
     "ui_netclass_set",
     "ui_outline_create_polygon",
+    "ui_stackup_set",
     "ui_symbol_edit_props",
     "ui_symbol_place_xy",
     "ui_track_draw_points",

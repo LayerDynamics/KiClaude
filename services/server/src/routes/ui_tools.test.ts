@@ -93,7 +93,7 @@ describe("/api/ui/<tool>/<project_id>", () => {
     expect(res.status).toBe(400);
   });
 
-  it("exposes the expected schematic (5) + PCB (10) UI tools on the allowlist", () => {
+  it("exposes the expected schematic (5) + PCB (11) UI tools on the allowlist", () => {
     expect([...ALLOWED_UI_TOOLS].sort()).toEqual([
       // M1-P-05 schematic UI tools.
       "ui_junction_place_xy",
@@ -115,6 +115,8 @@ describe("/api/ui/<tool>/<project_id>", () => {
       // M2-T-08 layer panel finaliser.
       "ui_layer_color_set",
       "ui_layer_reorder",
+      // M3-T-01 stackup editor.
+      "ui_stackup_set",
     ].sort());
   });
 });
