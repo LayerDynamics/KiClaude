@@ -32,14 +32,16 @@ use kiclaude_ki::kcir::{Pad, Pcb, Zone};
 use kiclaude_ki::sexpr::parse_str;
 
 /// Hausdorff tolerance — the maximum boundary-to-boundary distance
-/// between the algorithm's pour and `KiCad`'s reference pour. M2-R-05c
-/// brought this down to `0.005 mm` for concave (no pads) and `0.15
-/// mm` for the SMD-pad `simple` fixture by switching to a gap-
-/// annulus thermal-relief keepout; the THT-pad `thermal` fixture
-/// still sits at `0.35 mm` because KiCad's exact thermal-spoke
-/// geometry for through-hole pads remains under investigation.
-/// The 0.4 mm bound passes all three with margin.
-const HAUSDORFF_TOLERANCE_MM: f64 = 0.4;
+/// between the algorithm's pour and `KiCad`'s reference pour. After the
+/// M2-R-05c structural fixes (spoke-cross same-net keepout, full-width
+/// spokes unioned after the min-thickness opening, and `KiCad`'s
+/// ERROR_OUTSIDE arc decomposition for circle + rounded-rect keepouts):
+///   concave (no pads)  : Hausdorff 0.0050 mm
+///   simple  (SMD pads) : Hausdorff 0.0091 mm
+///   thermal (THT pads) : Hausdorff 0.0055 mm
+/// All three are under the original `0.01 mm` target on Hausdorff. The
+/// `0.01 mm` bound here holds the gate at the spec target on this metric.
+const HAUSDORFF_TOLERANCE_MM: f64 = 0.01;
 
 /// Sample spacing along polygon boundaries when measuring Hausdorff
 /// distance. Needs to be ≤ HAUSDORFF_TOLERANCE_MM / 2 so the
@@ -50,18 +52,18 @@ const SAMPLE_SPACING_MM: f64 = 0.005;
 
 /// Geometric-fidelity tolerance — the symmetric difference (XOR)
 /// between the algorithm's pour and `KiCad`'s reference pour must
-/// have area ≤ this many `mm²`. After M2-R-05c's annulus-keepout +
-/// drill-disc refactor:
-///   concave (no pads)  : XOR  0.0025 mm²
-///   simple  (SMD pads) : XOR  0.214  mm²
-///   thermal (THT pads) : XOR  0.809  mm²
-/// The `1 mm²` bound here passes all three with margin. The
-/// `simple`/`thermal` residuals come from KiCad's thermal-spoke
-/// micro-geometry (rounded inner ends, hole-aware cut order) that
-/// remains under investigation; the M2-R-05c follow-up is **not**
-/// closed at the originally-stated 0.01 mm² target. Closing it
-/// requires reading `pcbnew.cpp`'s zone-fill source.
-const XOR_AREA_TOLERANCE_MM2: f64 = 1.0;
+/// have area ≤ this many `mm²`. After the M2-R-05c structural fixes:
+///   concave (no pads)  : XOR 0.0025 mm²
+///   simple  (SMD pads) : XOR 0.0144 mm²
+///   thermal (THT pads) : XOR 0.0070 mm²
+/// concave + thermal meet the spec's `0.01 mm²` target; `simple` sits
+/// at `0.0144 mm²`. Its residual is the min-thickness opening's offset
+/// arc decomposition (the Minkowski edge-rect + corner-disc primitives
+/// vs `KiCad`'s `SHAPE_POLY_SET::Inflate`/`Deflate` `ROUND_ALL_CORNERS`
+/// pass) plus ~0.002 mm² of un-localised inter-pad slivers — see the
+/// **M2-R-05d** follow-up. The `0.02 mm²` bound passes all three with
+/// margin while keeping the gate ~50× tighter than the prior `1 mm²`.
+const XOR_AREA_TOLERANCE_MM2: f64 = 0.02;
 
 #[test]
 fn zone_fill_matches_kicad_concave() {
@@ -122,7 +124,46 @@ fn run_fixture(stem: &str) {
     let reference_polys = normalize_reference(&zone.filled_polygons);
     let xor_area = symmetric_difference_area(&combined_algorithm_polys, &reference_polys);
     let hausdorff = symmetric_hausdorff(&reference_samples, &algorithm_samples);
+    let alg_area = multi_polygon_area(&combined_algorithm_polys);
+    let ref_area = multi_polygon_area(&reference_polys);
+    eprintln!(
+        "[m2-r-05c] {stem}: alg_area={alg_area:.4} ref_area={ref_area:.4} diff={:.4}",
+        alg_area - ref_area,
+    );
     eprintln!("[m2-r-05c] {stem}: XOR={xor_area:.6} mm², Hausdorff={hausdorff:.6} mm",);
+    // Env-gated residual breakdown: dumps the per-island area + bbox of
+    // `alg − ref` (extra copper) and `ref − alg` (missing copper). Set
+    // `DUMP_EXTRA=1` to localise where a fixture's XOR residual lives.
+    if std::env::var("DUMP_EXTRA").is_ok() {
+        let dump = |label: &str, polys: &[Polygon]| {
+            for (i, p) in polys.iter().enumerate() {
+                let a = polygon_area(p);
+                if a < 1e-4 {
+                    continue;
+                }
+                let xs: Vec<f64> = p.points.iter().map(|pt| pt.x).collect();
+                let ys: Vec<f64> = p.points.iter().map(|pt| pt.y).collect();
+                let minx = xs.iter().cloned().fold(f64::INFINITY, f64::min);
+                let maxx = xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+                let miny = ys.iter().cloned().fold(f64::INFINITY, f64::min);
+                let maxy = ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+                eprintln!(
+                    "[{label} {stem} #{i}] area={a:.4} bbox=[{minx:.3},{miny:.3} .. {maxx:.3},{maxy:.3}] npts={}",
+                    p.points.len(),
+                );
+            }
+        };
+        let mut extra: Vec<Polygon> = Vec::new();
+        for ap in &combined_algorithm_polys {
+            extra.extend(polygon_difference(ap, &reference_polys));
+        }
+        let mut missing: Vec<Polygon> = Vec::new();
+        for rp in &reference_polys {
+            missing.extend(polygon_difference(rp, &combined_algorithm_polys));
+        }
+        dump("extra", &extra);
+        dump("missing", &missing);
+    }
     assert!(
         xor_area <= XOR_AREA_TOLERANCE_MM2,
         "{stem}: symmetric-difference area {xor_area:.6} mm² exceeds \
