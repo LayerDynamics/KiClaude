@@ -279,6 +279,22 @@ fn collision_for(head: HeadSegment, item: &ShoveItem, required: f64) -> Option<C
     }
 }
 
+/// Whether a head segment of width `head_width_mm` clears an obstacle
+/// segment `[o0, o1]` of width `obstacle_width_mm` at the given copper
+/// `clearance_mm`. The shove engine + the head-advance loop use this
+/// to confirm a candidate placement is DRC-clean.
+#[must_use]
+pub fn segment_clearance_ok(
+    head: HeadSegment,
+    o0: Point,
+    o1: Point,
+    obstacle_width_mm: f64,
+    clearance_mm: f64,
+) -> bool {
+    let required = head.width_mm / 2.0 + obstacle_width_mm / 2.0 + clearance_mm;
+    segment_segment_distance(head.a, head.b, o0, o1) >= required - EPS
+}
+
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod tests {

@@ -36,11 +36,15 @@
 //! 5. wasm + `kc_track_route` mode wiring + the M3-T-05 gesture.
 //!    **(next session)**
 
+pub mod engine;
 pub mod geom;
+pub mod route;
 pub mod world;
 
+pub use engine::{shove_head, ShoveOutcome};
 pub use geom::{push_vector, segment_segment_distance, translate, Vec2};
-pub use world::{Collision, HeadSegment, ItemId, ShoveItem, ShoveWorld};
+pub use route::{route_shove, MovedTrack, ShoveRouteInput, ShoveRouteResult};
+pub use world::{segment_clearance_ok, Collision, HeadSegment, ItemId, ShoveItem, ShoveWorld};
 
 /// Bounds on how hard the shove engine works before giving up and
 /// signalling the caller to fall back to walk-around.
@@ -50,12 +54,22 @@ pub use world::{Collision, HeadSegment, ItemId, ShoveItem, ShoveWorld};
 /// B pushes C …), while `max_total_shoves` caps the total number of
 /// item moves across the whole route attempt. A wide-but-shallow
 /// shove and a narrow-but-deep one are bounded separately.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ShoveBudget {
     /// Maximum depth of a single recursive shove chain.
+    #[serde(default = "default_recursion_depth")]
     pub max_recursion_depth: u32,
     /// Maximum number of item displacements across the route.
+    #[serde(default = "default_total_shoves")]
     pub max_total_shoves: u32,
+}
+
+fn default_recursion_depth() -> u32 {
+    8
+}
+
+fn default_total_shoves() -> u32 {
+    64
 }
 
 impl Default for ShoveBudget {

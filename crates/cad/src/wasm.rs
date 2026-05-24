@@ -243,3 +243,29 @@ pub fn scene_from_pcb_wasm(pcb_json: &str) -> Result<String, JsValue> {
     serde_json::to_string(&scene)
         .map_err(|e| JsValue::from_str(&format!("ThreeScene serialisation: {e}")))
 }
+
+/// M3-R-03 — push-and-shove route. Takes JSON `{ world: ShoveWorld,
+/// input: ShoveRouteInput }` and returns the `ShoveRouteResult` as
+/// JSON. The React `RouteTool` (M3-T-05) calls this live as the user
+/// drags a trace; the result is `Routed` (with the new route + every
+/// shoved obstacle's new geometry) or `FellBack` (the gesture then
+/// re-runs the M2 walk-around router).
+///
+/// # Errors
+/// Returns a JS error when the input JSON doesn't parse into the
+/// `{ world, input }` shape.
+#[wasm_bindgen(js_name = routeShove)]
+pub fn route_shove_wasm(request_json: &str) -> Result<String, JsValue> {
+    use crate::routing::shove::{route_shove, ShoveRouteInput, ShoveWorld};
+
+    #[derive(serde::Deserialize)]
+    struct Request {
+        world: ShoveWorld,
+        input: ShoveRouteInput,
+    }
+    let req: Request = serde_json::from_str(request_json)
+        .map_err(|e| JsValue::from_str(&format!("invalid shove route request JSON: {e}")))?;
+    let result = route_shove(&req.world, &req.input);
+    serde_json::to_string(&result)
+        .map_err(|e| JsValue::from_str(&format!("ShoveRouteResult serialisation: {e}")))
+}
