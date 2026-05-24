@@ -371,12 +371,14 @@ def test_build_default_aggregator_skips_digikey_without_credentials(
 ) -> None:
     monkeypatch.delenv("DIGIKEY_CLIENT_ID", raising=False)
     monkeypatch.delenv("DIGIKEY_CLIENT_SECRET", raising=False)
-    agg = build_default_aggregator(cache=PriceCache(path=":memory:"))
+    # Opt out of credential-less autoloaded distributors (JLCPCB) so
+    # we can isolate the "no DIGIKEY env" check.
+    agg = build_default_aggregator(
+        cache=PriceCache(path=":memory:"), include_jlcpcb=False
+    )
     try:
         assert agg.adapters == ()
     finally:
-        # build_default uses a real cache from the default path
-        # unless we override — but we passed in_memory above.
         pass
 
 
@@ -385,12 +387,72 @@ def test_build_default_aggregator_registers_digikey_when_credentials_present(
 ) -> None:
     monkeypatch.setenv("DIGIKEY_CLIENT_ID", "fake-id")
     monkeypatch.setenv("DIGIKEY_CLIENT_SECRET", "fake-secret")
-    agg = build_default_aggregator(cache=PriceCache(path=":memory:"))
+    agg = build_default_aggregator(
+        cache=PriceCache(path=":memory:"), include_jlcpcb=False
+    )
     try:
         assert len(agg.adapters) == 1
         assert agg.adapters[0].name == "digikey"
     finally:
         pass
+
+
+def test_build_default_aggregator_autoloads_jlcpcb_unconditionally(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """JLCPCB has anonymous quota — no env credentials required. The
+    factory autoloads it unless explicitly opted out via
+    `include_jlcpcb=False`."""
+    monkeypatch.delenv("DIGIKEY_CLIENT_ID", raising=False)
+    monkeypatch.delenv("DIGIKEY_CLIENT_SECRET", raising=False)
+    monkeypatch.delenv("MOUSER_API_KEY", raising=False)
+    monkeypatch.delenv("OCTOPART_CLIENT_ID", raising=False)
+    monkeypatch.delenv("OCTOPART_CLIENT_SECRET", raising=False)
+    agg = build_default_aggregator(cache=PriceCache(path=":memory:"))
+    assert [a.name for a in agg.adapters] == ["jlcpcb"]
+
+
+def test_build_default_aggregator_registers_mouser_when_key_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DIGIKEY_CLIENT_ID", raising=False)
+    monkeypatch.delenv("DIGIKEY_CLIENT_SECRET", raising=False)
+    monkeypatch.delenv("OCTOPART_CLIENT_ID", raising=False)
+    monkeypatch.delenv("OCTOPART_CLIENT_SECRET", raising=False)
+    monkeypatch.setenv("MOUSER_API_KEY", "fake-mouser-key")
+    agg = build_default_aggregator(
+        cache=PriceCache(path=":memory:"), include_jlcpcb=False
+    )
+    assert [a.name for a in agg.adapters] == ["mouser"]
+
+
+def test_build_default_aggregator_registers_octopart_when_creds_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DIGIKEY_CLIENT_ID", raising=False)
+    monkeypatch.delenv("DIGIKEY_CLIENT_SECRET", raising=False)
+    monkeypatch.delenv("MOUSER_API_KEY", raising=False)
+    monkeypatch.setenv("OCTOPART_CLIENT_ID", "fake-octo-id")
+    monkeypatch.setenv("OCTOPART_CLIENT_SECRET", "fake-octo-secret")
+    agg = build_default_aggregator(
+        cache=PriceCache(path=":memory:"), include_jlcpcb=False
+    )
+    assert [a.name for a in agg.adapters] == ["octopart"]
+
+
+def test_build_default_aggregator_full_house(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every supported distributor autoloads when its creds are
+    present + JLCPCB always — the production happy path."""
+    monkeypatch.setenv("DIGIKEY_CLIENT_ID", "x")
+    monkeypatch.setenv("DIGIKEY_CLIENT_SECRET", "x")
+    monkeypatch.setenv("MOUSER_API_KEY", "x")
+    monkeypatch.setenv("OCTOPART_CLIENT_ID", "x")
+    monkeypatch.setenv("OCTOPART_CLIENT_SECRET", "x")
+    agg = build_default_aggregator(cache=PriceCache(path=":memory:"))
+    names = sorted(a.name for a in agg.adapters)
+    assert names == ["digikey", "jlcpcb", "mouser", "octopart"]
 
 
 # ---------------------------------------------------------------------

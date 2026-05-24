@@ -316,24 +316,64 @@ def build_default_aggregator(
     *,
     cache: PriceCache | None = None,
     include_digikey: bool | None = None,
+    include_mouser: bool | None = None,
+    include_octopart: bool | None = None,
+    include_jlcpcb: bool | None = None,
 ) -> PriceAggregator:
     """Construct the aggregator with every distributor whose
     credentials are present in env, plus the shared SQLite cache.
 
-    `include_digikey` overrides credential detection (tests pass
-    `False` to keep the aggregator empty; production code lets it
-    autoload)."""
+    Per-distributor `include_*` overrides credential detection
+    (tests pass `False` to keep the aggregator empty; production
+    code lets it autoload from env)."""
     cache = cache or PriceCache()
     aggregator = PriceAggregator(cache=cache)
-    if include_digikey is False:
-        return aggregator
-    digikey_enabled = include_digikey is True or bool(
-        os.environ.get("DIGIKEY_CLIENT_ID") and os.environ.get("DIGIKEY_CLIENT_SECRET")
+
+    digikey_enabled = (
+        include_digikey
+        if include_digikey is not None
+        else bool(
+            os.environ.get("DIGIKEY_CLIENT_ID")
+            and os.environ.get("DIGIKEY_CLIENT_SECRET")
+        )
     )
     if digikey_enabled:
         from .digikey import DigiKeyAdapter
 
         aggregator.add_adapter(DigiKeyAdapter())
+
+    mouser_enabled = (
+        include_mouser
+        if include_mouser is not None
+        else bool(os.environ.get("MOUSER_API_KEY"))
+    )
+    if mouser_enabled:
+        from .mouser import MouserAdapter
+
+        aggregator.add_adapter(MouserAdapter())
+
+    octopart_enabled = (
+        include_octopart
+        if include_octopart is not None
+        else bool(
+            os.environ.get("OCTOPART_CLIENT_ID")
+            and os.environ.get("OCTOPART_CLIENT_SECRET")
+        )
+    )
+    if octopart_enabled:
+        from .octopart import OctopartAdapter
+
+        aggregator.add_adapter(OctopartAdapter())
+
+    # JLCPCB has anonymous quota — enable unconditionally by default.
+    # The opt-out is `include_jlcpcb=False` for offline / test runs
+    # that don't want the FX-rate fetch to fire.
+    jlcpcb_enabled = include_jlcpcb if include_jlcpcb is not None else True
+    if jlcpcb_enabled:
+        from .jlcpcb import JlcpcbAdapter
+
+        aggregator.add_adapter(JlcpcbAdapter())
+
     return aggregator
 
 
