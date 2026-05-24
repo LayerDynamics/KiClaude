@@ -171,6 +171,20 @@ fn analyze_group(group: &LengthGroup, tracks: &[Track]) -> LengthMatchReport {
     }
 }
 
+/// JSON-marshalled bridge to [`analyze`] — invoked from the React
+/// `LengthMatchPanel` (M3-T-04) via the cad wasm shim. Accepts a
+/// serialised [`Pcb`] (matching the KCIR JSON shape the rest of the
+/// UI uses) and returns `Vec<LengthMatchReport>` as JSON.
+///
+/// # Errors
+/// Returns `Err` when `pcb_json` doesn't deserialise to a `Pcb` or
+/// when the result can't be re-serialised.
+pub fn analyze_json(pcb_json: &str) -> Result<String, String> {
+    let pcb: Pcb = serde_json::from_str(pcb_json).map_err(|e| format!("invalid Pcb JSON: {e}"))?;
+    let reports = analyze(&pcb);
+    serde_json::to_string(&reports).map_err(|e| format!("LengthMatchReport serialisation: {e}"))
+}
+
 /// Sum of segment lengths for every track on `net`. Vias are
 /// excluded — see the module docstring.
 #[must_use]
@@ -314,5 +328,42 @@ mod tests {
     fn empty_groups_produces_empty_reports() {
         let pcb = Pcb::default();
         assert_eq!(analyze(&pcb), Vec::new());
+    }
+
+    #[test]
+    fn analyze_json_round_trips_a_simple_group() {
+        // Minimal Pcb JSON: one track on net `D0` (10 mm long), one
+        // length group declaring `D0` with target 10 mm, tol 0.5 mm.
+        // Expected: one report, one InRange member.
+        let pcb_json = r#"{
+            "version": 0, "generator": "", "thickness_mm": 0.0, "paper": "",
+            "pad_to_mask_clearance_mm": 0.0, "solder_mask_min_width_mm": 0.0,
+            "net_classes": [], "layers": [], "footprints": [],
+            "tracks": [{
+                "uuid":"t1","layer":"F.Cu","net":"D0",
+                "points_mm":[[0.0,0.0],[10.0,0.0]],
+                "width_mm":0.2,"locked":false
+            }],
+            "vias": [], "zones": [],
+            "outline": { "points_mm": [], "cutouts": [] },
+            "drawings": [], "nets": [], "diff_pairs": [],
+            "length_groups": [
+                {"name":"X","nets":["D0"],"target_length_mm":10.0,"tolerance_mm":0.5}
+            ]
+        }"#;
+        let raw = analyze_json(pcb_json).expect("analyze");
+        let reports: Vec<LengthMatchReport> = serde_json::from_str(&raw).unwrap();
+        assert_eq!(reports.len(), 1);
+        let r = &reports[0];
+        assert_eq!(r.name, "X");
+        assert_eq!(r.members.len(), 1);
+        assert_eq!(r.members[0].status, LengthMatchStatus::InRange);
+        assert!((r.members[0].current_length_mm - 10.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn analyze_json_surfaces_parse_errors() {
+        assert!(analyze_json("not json").is_err());
+        assert!(analyze_json("{}").is_err());
     }
 }

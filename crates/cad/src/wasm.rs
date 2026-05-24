@@ -12,6 +12,7 @@ use crate::impedance::{
     differential_microstrip_z_json, find_diff_microstrip_widths_for_zdiff,
     find_microstrip_width_for_z0, microstrip_z0_json, stripline_z0_json,
 };
+use crate::length_match::analyze_json as length_match_analyze_json;
 use crate::zones::fill::{fill_zone, ZoneFillInput, ZoneFillResult};
 
 /// `kiclaude-cad` crate version.
@@ -206,4 +207,20 @@ pub fn solve_diff_microstrip_width_for_zdiff_wasm(
 ) -> f64 {
     find_diff_microstrip_widths_for_zdiff(target_zdiff_ohms, gap_mm, height_mm, er, thickness_mm)
         .unwrap_or(f64::NAN)
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// M3-T-04 — Length-match analyzer bridge for the Length Match panel.
+// ─────────────────────────────────────────────────────────────────────
+
+/// Run the M3-R-05 analyzer against a serialised KCIR [`Pcb`] and
+/// return `Vec<LengthMatchReport>` as JSON. Powers the `LengthMatchPanel`
+/// status column without requiring a kiserver round-trip — sub-ms on
+/// realistic group counts.
+///
+/// # Errors
+/// Returns a JS error when the input is not a valid `Pcb` JSON.
+#[wasm_bindgen(js_name = analyzeLengthMatch)]
+pub fn analyze_length_match_wasm(pcb_json: &str) -> Result<String, JsValue> {
+    length_match_analyze_json(pcb_json).map_err(|e| JsValue::from_str(&e))
 }

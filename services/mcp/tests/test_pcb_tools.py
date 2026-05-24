@@ -1312,3 +1312,167 @@ def test_ui_diffpair_delete_unknown_returns_error() -> None:
     result = ui_diffpair_delete(project, name="NoSuchPair")
     assert result["ok"] is False
     assert "NoSuchPair" in result["error"]
+
+
+# ---------------------------------------------------------------------
+# M3-T-04 — Length-match group manager (ui_lengthgroup_set / delete).
+# ---------------------------------------------------------------------
+
+
+def _ddr_lengthgroup_project() -> dict[str, Any]:
+    return {
+        "pcb": {
+            "length_groups": [],
+            "nets": [
+                {"name": "DQ0"},
+                {"name": "DQ1"},
+                {"name": "DQ2"},
+                {"name": "DQ3"},
+                {"name": "DQS0_P"},
+                {"name": "DQS0_N"},
+                {"name": "GND"},
+            ],
+        }
+    }
+
+
+def test_ui_lengthgroup_set_creates_group_with_member_nets() -> None:
+    from kc_mcp.ui_tools import ui_lengthgroup_set
+
+    project = _ddr_lengthgroup_project()
+    result = ui_lengthgroup_set(
+        project,
+        name="DDR3_DQ_BYTE0",
+        nets=["DQ0", "DQ1", "DQ2", "DQ3", "DQS0_P", "DQS0_N"],
+        target_length_mm=42.5,
+        tolerance_mm=0.127,
+    )
+    assert result["ok"] is True
+    g = result["length_group"]
+    assert g["name"] == "DDR3_DQ_BYTE0"
+    assert g["nets"] == ["DQ0", "DQ1", "DQ2", "DQ3", "DQS0_P", "DQS0_N"]
+    assert g["target_length_mm"] == pytest.approx(42.5)
+    assert g["tolerance_mm"] == pytest.approx(0.127)
+    assert project["pcb"]["length_groups"][0] is g
+
+
+def test_ui_lengthgroup_set_target_zero_is_match_the_longest() -> None:
+    """target_length_mm == 0 is the analyzer's "match the longest"
+    sentinel — must round-trip through the validator as 0, not
+    rejected as "must be positive"."""
+    from kc_mcp.ui_tools import ui_lengthgroup_set
+
+    project = _ddr_lengthgroup_project()
+    result = ui_lengthgroup_set(
+        project,
+        name="GRP",
+        nets=["DQ0", "DQ1"],
+        target_length_mm=0,
+        tolerance_mm=0.5,
+    )
+    assert result["ok"] is True
+    assert result["length_group"]["target_length_mm"] == 0.0
+
+
+def test_ui_lengthgroup_set_upserts_in_place() -> None:
+    from kc_mcp.ui_tools import ui_lengthgroup_set
+
+    project = _ddr_lengthgroup_project()
+    ui_lengthgroup_set(project, name="GRP", nets=["DQ0"])
+    again = ui_lengthgroup_set(
+        project, name="GRP", nets=["DQ0", "DQ1"], tolerance_mm=0.05
+    )
+    assert again["ok"] is True
+    assert len(project["pcb"]["length_groups"]) == 1
+    assert project["pcb"]["length_groups"][0]["nets"] == ["DQ0", "DQ1"]
+    assert project["pcb"]["length_groups"][0]["tolerance_mm"] == pytest.approx(0.05)
+
+
+def test_ui_lengthgroup_set_requires_name() -> None:
+    from kc_mcp.ui_tools import ui_lengthgroup_set
+
+    result = ui_lengthgroup_set({"pcb": {}}, name="   ")
+    assert result["ok"] is False
+    assert "name" in result["error"]
+
+
+def test_ui_lengthgroup_set_create_requires_nets() -> None:
+    from kc_mcp.ui_tools import ui_lengthgroup_set
+
+    project = _ddr_lengthgroup_project()
+    result = ui_lengthgroup_set(project, name="GRP")
+    assert result["ok"] is False
+    assert "nets" in result["error"]
+    assert project["pcb"]["length_groups"] == []
+
+
+def test_ui_lengthgroup_set_rejects_unknown_net() -> None:
+    from kc_mcp.ui_tools import ui_lengthgroup_set
+
+    project = _ddr_lengthgroup_project()
+    result = ui_lengthgroup_set(project, name="GRP", nets=["DQ0", "PHANTOM"])
+    assert result["ok"] is False
+    assert "PHANTOM" in result["error"]
+    assert project["pcb"]["length_groups"] == []
+
+
+def test_ui_lengthgroup_set_rejects_duplicate_nets_in_group() -> None:
+    from kc_mcp.ui_tools import ui_lengthgroup_set
+
+    project = _ddr_lengthgroup_project()
+    result = ui_lengthgroup_set(project, name="GRP", nets=["DQ0", "DQ0"])
+    assert result["ok"] is False
+    assert "duplicate" in result["error"].lower()
+    assert project["pcb"]["length_groups"] == []
+
+
+def test_ui_lengthgroup_set_rejects_empty_nets_list() -> None:
+    from kc_mcp.ui_tools import ui_lengthgroup_set
+
+    project = _ddr_lengthgroup_project()
+    result = ui_lengthgroup_set(project, name="GRP", nets=["   ", ""])
+    assert result["ok"] is False
+    assert "nets" in result["error"]
+
+
+def test_ui_lengthgroup_set_rejects_negative_numeric() -> None:
+    from kc_mcp.ui_tools import ui_lengthgroup_set
+
+    project = _ddr_lengthgroup_project()
+    result = ui_lengthgroup_set(
+        project, name="GRP", nets=["DQ0"], target_length_mm=-1.0
+    )
+    assert result["ok"] is False
+    assert "target_length_mm" in result["error"]
+    assert project["pcb"]["length_groups"] == []
+
+
+def test_ui_lengthgroup_set_allows_net_in_multiple_groups() -> None:
+    """A net can sit in multiple groups (e.g. DQS in both DQ and
+    CLK groups) — no single-membership enforcement."""
+    from kc_mcp.ui_tools import ui_lengthgroup_set
+
+    project = _ddr_lengthgroup_project()
+    ui_lengthgroup_set(project, name="DDR_DQ", nets=["DQ0", "DQS0_P"])
+    result = ui_lengthgroup_set(project, name="DDR_CLK", nets=["DQS0_P", "DQS0_N"])
+    assert result["ok"] is True
+    assert {g["name"] for g in project["pcb"]["length_groups"]} == {"DDR_DQ", "DDR_CLK"}
+
+
+def test_ui_lengthgroup_delete_drops_named_group() -> None:
+    from kc_mcp.ui_tools import ui_lengthgroup_delete, ui_lengthgroup_set
+
+    project = _ddr_lengthgroup_project()
+    ui_lengthgroup_set(project, name="GRP", nets=["DQ0", "DQ1"])
+    result = ui_lengthgroup_delete(project, name="GRP")
+    assert result["ok"] is True
+    assert result["deleted"] == "GRP"
+    assert project["pcb"]["length_groups"] == []
+
+
+def test_ui_lengthgroup_delete_unknown_returns_error() -> None:
+    from kc_mcp.ui_tools import ui_lengthgroup_delete
+
+    result = ui_lengthgroup_delete({"pcb": {"length_groups": []}}, name="NoSuchGroup")
+    assert result["ok"] is False
+    assert "NoSuchGroup" in result["error"]

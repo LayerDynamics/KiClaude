@@ -47,6 +47,9 @@ export const ALLOWED_UI_TOOLS = [
   // M3-T-03 diff-pair declaration panel.
   "ui_diffpair_set",
   "ui_diffpair_delete",
+  // M3-T-04 length-match group manager.
+  "ui_lengthgroup_set",
+  "ui_lengthgroup_delete",
 ] as const;
 export type AllowedUiTool = (typeof ALLOWED_UI_TOOLS)[number];
 

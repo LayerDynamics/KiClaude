@@ -18,6 +18,7 @@ from .footprint_xy import ui_footprint_place_xy
 from .junction_xy import ui_junction_place_xy
 from .label_xy import ui_label_place_xy
 from .layer_color import ui_layer_color_set, ui_layer_reorder
+from .lengthgroup_edit import ui_lengthgroup_delete, ui_lengthgroup_set
 from .netclass_edit import ui_netclass_delete, ui_netclass_set
 from .outline_polygon import ui_outline_create_polygon
 from .stackup_edit import ui_stackup_set
@@ -54,6 +55,9 @@ UI_TOOLS = {
     # M3-T-03 extension — diff-pair declaration panel.
     "ui_diffpair_set": ui_diffpair_set,
     "ui_diffpair_delete": ui_diffpair_delete,
+    # M3-T-04 extension — length-match group manager.
+    "ui_lengthgroup_set": ui_lengthgroup_set,
+    "ui_lengthgroup_delete": ui_lengthgroup_delete,
 }
 
 
@@ -69,6 +73,8 @@ __all__ = [
     "ui_netclass_set",
     "ui_diffpair_delete",
     "ui_diffpair_set",
+    "ui_lengthgroup_delete",
+    "ui_lengthgroup_set",
     "ui_outline_create_polygon",
     "ui_stackup_set",
     "ui_symbol_edit_props",
