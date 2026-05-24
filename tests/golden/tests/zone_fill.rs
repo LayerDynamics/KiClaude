@@ -34,13 +34,13 @@ use kiclaude_ki::sexpr::parse_str;
 /// Hausdorff tolerance — the maximum boundary-to-boundary distance
 /// between the algorithm's pour and `KiCad`'s reference pour. After the
 /// M2-R-05c structural fixes (spoke-cross same-net keepout, full-width
-/// spokes unioned after the min-thickness opening, and `KiCad`'s
-/// ERROR_OUTSIDE arc decomposition for circle + rounded-rect keepouts):
-///   concave (no pads)  : Hausdorff 0.0050 mm
-///   simple  (SMD pads) : Hausdorff 0.0091 mm
-///   thermal (THT pads) : Hausdorff 0.0055 mm
-/// All three are under the original `0.01 mm` target on Hausdorff. The
-/// `0.01 mm` bound here holds the gate at the spec target on this metric.
+/// spokes unioned after the min-thickness opening, `KiCad`'s
+/// ERROR_OUTSIDE arc decomposition for circle + rounded-rect keepouts,
+/// and `m_MaxError`-based arc tessellation for the opening offset):
+///   concave (no pads)  : Hausdorff 0.0030 mm
+///   simple  (SMD pads) : Hausdorff 0.0070 mm
+///   thermal (THT pads) : Hausdorff 0.0030 mm
+/// All three are well under the spec's `0.01 mm` target on Hausdorff.
 const HAUSDORFF_TOLERANCE_MM: f64 = 0.01;
 
 /// Sample spacing along polygon boundaries when measuring Hausdorff
@@ -52,18 +52,23 @@ const SAMPLE_SPACING_MM: f64 = 0.005;
 
 /// Geometric-fidelity tolerance — the symmetric difference (XOR)
 /// between the algorithm's pour and `KiCad`'s reference pour must
-/// have area ≤ this many `mm²`. After the M2-R-05c structural fixes:
-///   concave (no pads)  : XOR 0.0025 mm²
-///   simple  (SMD pads) : XOR 0.0144 mm²
-///   thermal (THT pads) : XOR 0.0070 mm²
+/// have area ≤ this many `mm²`. After the M2-R-05c structural fixes
+/// (including the `m_MaxError`-based arc tessellation for the
+/// min-thickness opening offset):
+///   concave (no pads)  : XOR 0.0010 mm²
+///   simple  (SMD pads) : XOR 0.0123 mm²
+///   thermal (THT pads) : XOR 0.0047 mm²
 /// concave + thermal meet the spec's `0.01 mm²` target; `simple` sits
-/// at `0.0144 mm²`. Its residual is the min-thickness opening's offset
-/// arc decomposition (the Minkowski edge-rect + corner-disc primitives
-/// vs `KiCad`'s `SHAPE_POLY_SET::Inflate`/`Deflate` `ROUND_ALL_CORNERS`
-/// pass) plus ~0.002 mm² of un-localised inter-pad slivers — see the
-/// **M2-R-05d** follow-up. The `0.02 mm²` bound passes all three with
-/// margin while keeping the gate ~50× tighter than the prior `1 mm²`.
-const XOR_AREA_TOLERANCE_MM2: f64 = 0.02;
+/// at `0.0123 mm²`. The residual is the per-corner phase mismatch
+/// between our Minkowski-union round-corner offset (vertex discs at a
+/// fixed phase) and `KiCad`'s `SHAPE_POLY_SET` Clipper round joins
+/// (arc vertices aligned to the edge tangents), plus the opening's
+/// behaviour in the thin neck between the two close pads. Closing it to
+/// 0.01 needs an edge-aligned round-join offsetter (or a dedicated
+/// offset library) to replace the Minkowski-union — see **M2-R-05d**.
+/// The `0.015 mm²` bound passes all three (~66× tighter than the prior
+/// `1 mm²`) while leaving the 0.01 target open for `simple`.
+const XOR_AREA_TOLERANCE_MM2: f64 = 0.015;
 
 #[test]
 fn zone_fill_matches_kicad_concave() {
