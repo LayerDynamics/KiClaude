@@ -50,6 +50,8 @@ export const ALLOWED_UI_TOOLS = [
   // M3-T-04 length-match group manager.
   "ui_lengthgroup_set",
   "ui_lengthgroup_delete",
+  // M3-T-05 push-and-shove route apply.
+  "ui_shove_apply",
 ] as const;
 export type AllowedUiTool = (typeof ALLOWED_UI_TOOLS)[number];
 

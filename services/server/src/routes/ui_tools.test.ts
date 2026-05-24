@@ -93,7 +93,7 @@ describe("/api/ui/<tool>/<project_id>", () => {
     expect(res.status).toBe(400);
   });
 
-  it("exposes the expected schematic (5) + PCB (15) UI tools on the allowlist", () => {
+  it("exposes the expected schematic (5) + PCB (16) UI tools on the allowlist", () => {
     expect([...ALLOWED_UI_TOOLS].sort()).toEqual([
       // M1-P-05 schematic UI tools.
       "ui_junction_place_xy",
@@ -123,6 +123,8 @@ describe("/api/ui/<tool>/<project_id>", () => {
       // M3-T-04 length-match group manager.
       "ui_lengthgroup_set",
       "ui_lengthgroup_delete",
+      // M3-T-05 push-and-shove route apply.
+      "ui_shove_apply",
     ].sort());
   });
 });

@@ -21,6 +21,7 @@ from .layer_color import ui_layer_color_set, ui_layer_reorder
 from .lengthgroup_edit import ui_lengthgroup_delete, ui_lengthgroup_set
 from .netclass_edit import ui_netclass_delete, ui_netclass_set
 from .outline_polygon import ui_outline_create_polygon
+from .shove_apply import ui_shove_apply
 from .stackup_edit import ui_stackup_set
 from .symbol_edit import ui_symbol_edit_props
 from .symbol_xy import ui_symbol_place_xy
@@ -58,24 +59,27 @@ UI_TOOLS = {
     # M3-T-04 extension — length-match group manager.
     "ui_lengthgroup_set": ui_lengthgroup_set,
     "ui_lengthgroup_delete": ui_lengthgroup_delete,
+    # M3-T-05 extension — push-and-shove route apply.
+    "ui_shove_apply": ui_shove_apply,
 }
 
 
 __all__ = [
     "UI_TOOLS",
+    "ui_diffpair_delete",
+    "ui_diffpair_set",
     "ui_footprint_move",
     "ui_footprint_place_xy",
     "ui_junction_place_xy",
     "ui_label_place_xy",
     "ui_layer_color_set",
     "ui_layer_reorder",
-    "ui_netclass_delete",
-    "ui_netclass_set",
-    "ui_diffpair_delete",
-    "ui_diffpair_set",
     "ui_lengthgroup_delete",
     "ui_lengthgroup_set",
+    "ui_netclass_delete",
+    "ui_netclass_set",
     "ui_outline_create_polygon",
+    "ui_shove_apply",
     "ui_stackup_set",
     "ui_symbol_edit_props",
     "ui_symbol_place_xy",
