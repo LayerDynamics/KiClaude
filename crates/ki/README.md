@@ -24,8 +24,13 @@ python -c "from ki_native import open_project; print(open_project('../../example
 
 ```bash
 # from the repo root:
-wasm-pack build --target web crates/ki
+wasm-pack build --target web crates/ki -- --features wasm-api
 ```
+
+`wasm-api` is off by default so this crate can be pulled in as a Rust
+dependency from other wasm-pack-built crates (e.g. `kiclaude-cad`'s
+KCIR-aware solvers) without colliding with their `#[wasm_bindgen]`
+exports.
 
 Both bindings live behind `#[cfg]` gates so a native `cargo build`
 pays no cost for either.

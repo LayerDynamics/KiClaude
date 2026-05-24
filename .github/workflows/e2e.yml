@@ -50,7 +50,7 @@ jobs:
           uv tool install maturin
           (cd crates/ki && VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv maturin develop --features python)
           pnpm install --frozen-lockfile=false
-          wasm-pack build --target web crates/ki
+          wasm-pack build --target web crates/ki -- --features wasm-api
           wasm-pack build --target web crates/cad
 
       - name: Install Playwright browsers

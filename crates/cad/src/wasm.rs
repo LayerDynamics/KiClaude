@@ -8,6 +8,10 @@ use wasm_bindgen::prelude::*;
 
 use crate::drc::{check_all, DrcInput, DrcIssue};
 use crate::geom::{BBox, Point, Polygon};
+use crate::impedance::{
+    differential_microstrip_z_json, find_diff_microstrip_widths_for_zdiff,
+    find_microstrip_width_for_z0, microstrip_z0_json, stripline_z0_json,
+};
 use crate::zones::fill::{fill_zone, ZoneFillInput, ZoneFillResult};
 
 /// `kiclaude-cad` crate version.
@@ -125,4 +129,81 @@ pub fn fill_zone_wasm(input_json: &str) -> Result<String, JsValue> {
     let result: ZoneFillResult = fill_zone(&input);
     serde_json::to_string(&result)
         .map_err(|e| JsValue::from_str(&format!("ZoneFillResult serialization: {e}")))
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// M3-T-02 — Impedance solver bridges for the Net inspector.
+//
+// All forward (geometry → Z0) entry points take a JSON `TraceGeometry`
+// / `DiffPairGeometry` blob — same shape that
+// [`crate::impedance::SingleEndedResult`] / [`DifferentialResult`]
+// document. Both helpers are tested on the native side via
+// `cargo test -p kiclaude-cad`; the wasm shims below are pure
+// `?`-propagation, so a parse error reaches the React panel as a
+// readable JS `Error`.
+// ─────────────────────────────────────────────────────────────────────
+
+/// Forward-solve both microstrip `Z0` models. Returns JSON
+/// `{ z0_hammerstad_ohms, z0_ipc2141_ohms }`.
+///
+/// # Errors
+/// Returns a JS error when the input is not a valid
+/// `TraceGeometry` JSON.
+#[wasm_bindgen(js_name = microstripZ0)]
+pub fn microstrip_z0_wasm(input_json: &str) -> Result<String, JsValue> {
+    microstrip_z0_json(input_json).map_err(|e| JsValue::from_str(&e))
+}
+
+/// Forward-solve the IPC-2141A stripline `Z0` and return the bare
+/// ohms value (single number — no second formula to cross-check
+/// against on the stripline path).
+///
+/// # Errors
+/// Returns a JS error when the input is not a valid
+/// `TraceGeometry` JSON.
+#[wasm_bindgen(js_name = striplineZ0)]
+pub fn stripline_z0_wasm(input_json: &str) -> Result<f64, JsValue> {
+    stripline_z0_json(input_json).map_err(|e| JsValue::from_str(&e))
+}
+
+/// Forward-solve a differential pair. Returns JSON
+/// `{ zdiff_ohms, zcomm_ohms, z0_single_ended_ohms }`.
+///
+/// # Errors
+/// Returns a JS error when the input is not a valid
+/// `DiffPairGeometry` JSON.
+#[wasm_bindgen(js_name = differentialMicrostripZ)]
+pub fn differential_microstrip_z_wasm(input_json: &str) -> Result<String, JsValue> {
+    differential_microstrip_z_json(input_json).map_err(|e| JsValue::from_str(&e))
+}
+
+/// Bisection solver: trace width (mm) that hits `target_ohms` on the
+/// given stackup. Returns `f64::NAN` when the target is unreachable —
+/// keeps the wasm boundary pure-numeric so callers don't need
+/// `Option<number>` discriminants.
+#[wasm_bindgen(js_name = solveMicrostripWidthForZ0)]
+#[must_use]
+pub fn solve_microstrip_width_for_z0_wasm(
+    target_ohms: f64,
+    height_mm: f64,
+    er: f64,
+    thickness_mm: f64,
+) -> f64 {
+    find_microstrip_width_for_z0(target_ohms, height_mm, er, thickness_mm).unwrap_or(f64::NAN)
+}
+
+/// Bisection solver: per-trace width (mm) that hits a target
+/// `Zdiff` for the given gap + stackup. Returns `f64::NAN` when
+/// unreachable.
+#[wasm_bindgen(js_name = solveDiffMicrostripWidthForZdiff)]
+#[must_use]
+pub fn solve_diff_microstrip_width_for_zdiff_wasm(
+    target_zdiff_ohms: f64,
+    gap_mm: f64,
+    height_mm: f64,
+    er: f64,
+    thickness_mm: f64,
+) -> f64 {
+    find_diff_microstrip_widths_for_zdiff(target_zdiff_ohms, gap_mm, height_mm, er, thickness_mm)
+        .unwrap_or(f64::NAN)
 }

@@ -16,7 +16,13 @@ pub mod kcir;
 pub mod library;
 pub mod sexpr;
 
-#[cfg(target_arch = "wasm32")]
+// Wasm bindings only ship when this crate is explicitly built as a
+// browser package via `wasm-pack build --features wasm-api`. Gating
+// on `target_arch` alone caused link-time symbol collisions in
+// downstream wasm-pack builds that pull `kiclaude-ki` in as a Rust
+// dependency (notably `crates/cad`, which depends on KCIR types but
+// has its own `#[wasm_bindgen]` surface).
+#[cfg(all(target_arch = "wasm32", feature = "wasm-api"))]
 pub mod wasm;
 
 #[cfg(feature = "python")]

@@ -306,6 +306,88 @@ pub fn find_diff_microstrip_widths_for_zdiff(
     find_microstrip_width_for_z0(target_z0, height_mm, er, thickness_mm)
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// M3-T-02 — JSON-marshalled solver entrypoints.
+//
+// The Net inspector (`client/src/components/pcb/NetInspector.tsx`)
+// drives the solver from React via the wasm bridge. The wasm-bindgen
+// shims in `super::wasm` delegate to these helpers so the JSON-
+// serialisation contract is exercised on native targets where it can
+// be unit-tested with `cargo test` (wasm targets only re-export).
+// ─────────────────────────────────────────────────────────────────────
+
+/// `Z0` result for a single trace, as carried across the JS boundary.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct SingleEndedResult {
+    /// Hammerstad-Jensen — accuracy reference.
+    pub z0_hammerstad_ohms: f64,
+    /// IPC-2141A surface microstrip — standards reference.
+    pub z0_ipc2141_ohms: f64,
+}
+
+/// Result of [`differential_microstrip_z`] in JS-friendly form.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct DifferentialResult {
+    /// Differential mode impedance (ohms).
+    pub zdiff_ohms: f64,
+    /// Common mode impedance (ohms).
+    pub zcomm_ohms: f64,
+    /// Underlying single-ended Z0 (Hammerstad-Jensen). Useful for the
+    /// Net inspector's "what is each leg seeing" readout.
+    pub z0_single_ended_ohms: f64,
+}
+
+/// Parse a [`TraceGeometry`] JSON payload and return both microstrip
+/// `Z0` results bundled as JSON. Single round-trip; the React panel
+/// shows both numbers side-by-side so the user can sanity-check the
+/// fab-side IPC formula against the accuracy reference.
+///
+/// # Errors
+/// Returns `Err` if `input_json` doesn't deserialise to a
+/// [`TraceGeometry`] (mis-spelled field, wrong type, …) or if the
+/// result can't be re-serialised.
+pub fn microstrip_z0_json(input_json: &str) -> Result<String, String> {
+    let g: TraceGeometry =
+        serde_json::from_str(input_json).map_err(|e| format!("invalid TraceGeometry JSON: {e}"))?;
+    let out = SingleEndedResult {
+        z0_hammerstad_ohms: microstrip_z0(&g),
+        z0_ipc2141_ohms: microstrip_z0_ipc2141(&g),
+    };
+    serde_json::to_string(&out).map_err(|e| format!("SingleEndedResult serialisation: {e}"))
+}
+
+/// Parse a [`TraceGeometry`] JSON payload and return the IPC-2141A
+/// stripline `Z0` as a bare ohms value. Stripline is the inner-layer
+/// case so the inspector calls this branch when the selected net's
+/// home layer is one of the inner copper planes.
+///
+/// # Errors
+/// Returns `Err` if `input_json` doesn't deserialise to a
+/// [`TraceGeometry`].
+pub fn stripline_z0_json(input_json: &str) -> Result<f64, String> {
+    let g: TraceGeometry =
+        serde_json::from_str(input_json).map_err(|e| format!("invalid TraceGeometry JSON: {e}"))?;
+    Ok(stripline_z0(&g))
+}
+
+/// Parse a [`DiffPairGeometry`] JSON payload and return the
+/// `(Zdiff, Zcomm, Z0_single_ended)` triple as JSON.
+///
+/// # Errors
+/// Returns `Err` if `input_json` doesn't deserialise to a
+/// [`DiffPairGeometry`] or if the result can't be re-serialised.
+pub fn differential_microstrip_z_json(input_json: &str) -> Result<String, String> {
+    let g: DiffPairGeometry = serde_json::from_str(input_json)
+        .map_err(|e| format!("invalid DiffPairGeometry JSON: {e}"))?;
+    let (zdiff, zcomm) = differential_microstrip_z(&g);
+    let out = DifferentialResult {
+        zdiff_ohms: zdiff,
+        zcomm_ohms: zcomm,
+        z0_single_ended_ohms: microstrip_z0(&g.trace),
+    };
+    serde_json::to_string(&out).map_err(|e| format!("DifferentialResult serialisation: {e}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -484,5 +566,72 @@ mod tests {
         });
         // At 5 mm gap, k ≈ 0.48·exp(-32) ≈ 0 → Zdiff ≈ 2·Z0.
         assert!((zdiff_loose - 2.0 * z0).abs() < 0.5);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // M3-T-02 — JSON marshalling contract tests.
+    //
+    // Cover the parse → solve → serialise round-trip on the native
+    // side; the wasm-bindgen wrappers in `super::super::wasm` are then
+    // a one-line `?`-propagation each and need no further coverage.
+    // ─────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn microstrip_z0_json_round_trips_both_models() {
+        let input = r#"{"width_mm":0.29,"thickness_mm":0.035,
+                        "dielectric_height_mm":0.15,"dielectric_constant":4.3}"#;
+        let out = microstrip_z0_json(input).expect("solve");
+        let parsed: SingleEndedResult = serde_json::from_str(&out).expect("parse result");
+        // Matches the existing `hammerstad_50_ohm_reference_geometry`
+        // expectation but on the JSON side.
+        assert!(
+            (parsed.z0_hammerstad_ohms - 50.0).abs() < 5.0,
+            "Hammerstad off: {parsed:?}",
+        );
+        assert!(
+            (parsed.z0_ipc2141_ohms - parsed.z0_hammerstad_ohms).abs() < 8.0,
+            "IPC off: {parsed:?}",
+        );
+    }
+
+    #[test]
+    fn stripline_z0_json_lower_than_microstrip_for_same_geometry() {
+        let input = r#"{"width_mm":0.29,"thickness_mm":0.035,
+                        "dielectric_height_mm":0.15,"dielectric_constant":4.3}"#;
+        let micro: SingleEndedResult =
+            serde_json::from_str(&microstrip_z0_json(input).unwrap()).unwrap();
+        let strip = stripline_z0_json(input).unwrap();
+        assert!(
+            strip < micro.z0_ipc2141_ohms,
+            "stripline {strip} not below microstrip {}",
+            micro.z0_ipc2141_ohms,
+        );
+    }
+
+    #[test]
+    fn differential_z_json_includes_single_ended_reference() {
+        let input = r#"{
+            "trace":{"width_mm":0.20,"thickness_mm":0.035,
+                     "dielectric_height_mm":0.15,"dielectric_constant":4.3},
+            "gap_mm":0.127
+        }"#;
+        let out = differential_microstrip_z_json(input).expect("solve");
+        let parsed: DifferentialResult = serde_json::from_str(&out).unwrap();
+        // Sanity: Zdiff < 2·Z0 (the loose-coupling asymptote) by a
+        // few ohms at 5 mil gap.
+        assert!(
+            parsed.zdiff_ohms < 2.0 * parsed.z0_single_ended_ohms,
+            "{parsed:?}",
+        );
+        // Common mode is well below Z0 (≈ Z0/2 plus small correction).
+        assert!(parsed.zcomm_ohms < parsed.z0_single_ended_ohms);
+        assert!(parsed.zcomm_ohms > 0.0);
+    }
+
+    #[test]
+    fn impedance_json_helpers_surface_parse_errors() {
+        assert!(microstrip_z0_json("not json").is_err());
+        assert!(stripline_z0_json("{}").is_err());
+        assert!(differential_microstrip_z_json(r#"{"trace": "no"}"#).is_err());
     }
 }

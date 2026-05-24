@@ -27,6 +27,14 @@ python = ["dep:pyo3"]
 # ts-export` runs (M1-R-03). Off by default so the wasm + pyo3 build
 # don't pull in ts-rs.
 ts-export = ["dep:ts-rs"]
+# Enables the wasm-bindgen surface in `src/wasm.rs`. Off by default so
+# downstream crates (notably `kiclaude-cad`, which depends on `ki` for
+# its KCIR types) can be built to wasm32 without ki's own
+# `#[wasm_bindgen]` exports colliding at link time (M3-T-02 hit this
+# when both crates exported `crateVersion`). The standalone
+# `wasm-pack build --target web crates/ki` invocation now passes
+# `--features wasm-api`.
+wasm-api = []
 
 [dependencies]
 serde.workspace = true
