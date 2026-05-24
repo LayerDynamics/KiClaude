@@ -13,7 +13,9 @@
 //!   live as the user drags the route endpoint.
 
 pub mod diffpair;
+pub mod shove;
 pub mod walkaround;
 
 pub use diffpair::{route as route_diffpair, DiffPairInput, DiffPairRouteResult};
+pub use shove::{ShoveBudget, ShoveItem, ShoveWorld};
 pub use walkaround::{route, RoutingError, WalkaroundInput, WalkaroundResult};
