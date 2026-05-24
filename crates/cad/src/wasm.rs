@@ -13,7 +13,9 @@ use crate::impedance::{
     find_microstrip_width_for_z0, microstrip_z0_json, stripline_z0_json,
 };
 use crate::length_match::analyze_json as length_match_analyze_json;
+use crate::three_scene::scene_from_pcb;
 use crate::zones::fill::{fill_zone, ZoneFillInput, ZoneFillResult};
+use kiclaude_ki::kcir::Pcb;
 
 /// `kiclaude-cad` crate version.
 #[wasm_bindgen(js_name = crateVersion)]
@@ -223,4 +225,21 @@ pub fn solve_diff_microstrip_width_for_zdiff_wasm(
 #[wasm_bindgen(js_name = analyzeLengthMatch)]
 pub fn analyze_length_match_wasm(pcb_json: &str) -> Result<String, JsValue> {
     length_match_analyze_json(pcb_json).map_err(|e| JsValue::from_str(&e))
+}
+
+/// M3-T-06/T-07 — produce a `ThreeScene` from a serialised KCIR
+/// [`Pcb`] so the kithree viewer can render the board + every
+/// footprint's `Model3D` placement. The JSON shape is the
+/// `crates/cad/src/three_scene.rs::ThreeScene` serde mirror,
+/// consumed by `@kiclaude/kithree::loadThreeScene`.
+///
+/// # Errors
+/// Returns a JS error when the input is not a valid `Pcb` JSON.
+#[wasm_bindgen(js_name = sceneFromPcb)]
+pub fn scene_from_pcb_wasm(pcb_json: &str) -> Result<String, JsValue> {
+    let pcb: Pcb = serde_json::from_str(pcb_json)
+        .map_err(|e| JsValue::from_str(&format!("invalid Pcb JSON: {e}")))?;
+    let scene = scene_from_pcb(&pcb);
+    serde_json::to_string(&scene)
+        .map_err(|e| JsValue::from_str(&format!("ThreeScene serialisation: {e}")))
 }

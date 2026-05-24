@@ -1,15 +1,20 @@
 import {
   AmbientLight,
   AxesHelper,
+  Box3,
   Color,
   DirectionalLight,
+  type Group,
   Mesh,
   MeshStandardMaterial,
   PerspectiveCamera,
   PlaneGeometry,
   Scene,
+  Vector3,
   WebGLRenderer,
 } from "three";
+
+import { DEFAULT_THEME, loadThreeScene, type LoadedScene, type SceneTheme, type ThreeScene } from "./scene.js";
 
 /**
  * Configuration for {@link Viewer}. All fields optional; defaults are
@@ -57,6 +62,8 @@ export class Viewer {
   private container: HTMLElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private animationFrame: number | null = null;
+  private loadedScene: LoadedScene | null = null;
+  private placeholderPlane: Mesh | null = null;
 
   constructor(options: ViewerOptions = {}) {
     this.opts = {
@@ -94,13 +101,15 @@ export class Viewer {
     camera.position.set(120, 120, 160);
     camera.lookAt(0, 0, 0);
 
-    // Board plane.
+    // Placeholder board plane — replaced when `loadScene` runs.
     const plane = new Mesh(
       new PlaneGeometry(this.opts.boardSizeMm, this.opts.boardSizeMm),
       new MeshStandardMaterial({ color: 0x1f6f43, metalness: 0.1, roughness: 0.7 }),
     );
     plane.rotation.x = -Math.PI / 2;
+    plane.name = "kithree.placeholder";
     scene.add(plane);
+    this.placeholderPlane = plane;
 
     // Lighting.
     const ambient = new AmbientLight(0xffffff, 0.4);
@@ -139,6 +148,17 @@ export class Viewer {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
     }
+    if (this.loadedScene) {
+      this.scene?.remove(this.loadedScene.group);
+      this.loadedScene.dispose();
+      this.loadedScene = null;
+    }
+    if (this.placeholderPlane) {
+      this.scene?.remove(this.placeholderPlane);
+      this.placeholderPlane.geometry.dispose();
+      (this.placeholderPlane.material as MeshStandardMaterial).dispose();
+      this.placeholderPlane = null;
+    }
     if (this.renderer && this.container && this.renderer.domElement.parentNode) {
       this.container.removeChild(this.renderer.domElement);
     }
@@ -147,6 +167,67 @@ export class Viewer {
     this.scene = null;
     this.camera = null;
     this.container = null;
+  }
+
+  /**
+   * Replace the current 3D contents with `scene` (a `ThreeScene` from
+   * the cad crate's `scene_from_pcb`). Drops the M0 placeholder plane
+   * the first time it runs; subsequent calls swap one loaded scene
+   * for another and free the prior GL resources.
+   *
+   * Returns the `LoadedScene` so callers can reach into `markers` for
+   * picking / per-refdes highlighting.
+   */
+  loadScene(scene: ThreeScene, theme: SceneTheme = DEFAULT_THEME): LoadedScene {
+    if (!this.scene || !this.camera) {
+      throw new Error("Viewer.loadScene() called before mount()");
+    }
+    if (this.placeholderPlane) {
+      this.scene.remove(this.placeholderPlane);
+      this.placeholderPlane.geometry.dispose();
+      (this.placeholderPlane.material as MeshStandardMaterial).dispose();
+      this.placeholderPlane = null;
+    }
+    if (this.loadedScene) {
+      this.scene.remove(this.loadedScene.group);
+      this.loadedScene.dispose();
+      this.loadedScene = null;
+    }
+    const loaded = loadThreeScene(scene, theme);
+    this.scene.add(loaded.group);
+    this.loadedScene = loaded;
+    this.frameCameraOnGroup(loaded.group);
+    return loaded;
+  }
+
+  /** Drop the currently loaded scene (if any) without disposing the
+   * viewer. Useful when the user closes the active project. */
+  clearScene(): void {
+    if (!this.scene) return;
+    if (this.loadedScene) {
+      this.scene.remove(this.loadedScene.group);
+      this.loadedScene.dispose();
+      this.loadedScene = null;
+    }
+  }
+
+  /** Currently-loaded scene's [`LoadedScene`], or `null` if none. */
+  get scene3d(): LoadedScene | null {
+    return this.loadedScene;
+  }
+
+  private frameCameraOnGroup(group: Group): void {
+    if (!this.camera) return;
+    const box = new Box3().setFromObject(group);
+    if (box.isEmpty()) return;
+    const size = box.getSize(new Vector3());
+    const center = box.getCenter(new Vector3());
+    const diag = Math.max(size.x, size.y, size.z) || 1;
+    // Pull the camera back enough to fit the bounding box with margin.
+    const distance = diag * 2.0;
+    this.camera.position.set(center.x + distance, center.y + distance, center.z + distance);
+    this.camera.lookAt(center);
+    this.camera.updateProjectionMatrix();
   }
 
   /** The mounted DOM `<canvas>` element, or `null` before mount. */

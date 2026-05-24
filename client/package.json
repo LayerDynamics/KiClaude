@@ -14,16 +14,19 @@
     "postinstall": "node scripts/build-kicanvas.mjs"
   },
   "dependencies": {
+    "@kiclaude/kithree": "workspace:*",
     "kicanvas": "github:theacodes/kicanvas#b031159eb74aaa7eef2b026fd85d35bc05ff2095",
     "kiclaude-cad": "file:../crates/cad/pkg",
     "kiclaude-ki": "file:../crates/ki/pkg",
     "radix-ui": "^1.4.3",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "three": "^0.169.0",
     "zustand": "^5.0.0"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",
+    "@types/three": "^0.169.0",
     "@eslint/js": "^10.0.1",
     "@rolldown/plugin-babel": "^0.2.3",
     "@tailwindcss/vite": "^4.3.0",
