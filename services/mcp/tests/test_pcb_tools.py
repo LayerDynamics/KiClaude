@@ -348,8 +348,9 @@ def test_claude_registry_contains_all_pcb_tools() -> None:
         "kc_diff",
     }
     assert expected <= names
-    # 11 M1 schematic + 2 M0 (ping + snapshot_revert reused) + 13 M2 PCB.
-    assert len(_CLAUDE_TOOLS) == 13 + 13
+    # 13 M0/M1 schematic+core + 13 M2 PCB + 2 M3-P-06 sourcing
+    # (kc_part_search, kc_bom_price).
+    assert len(_CLAUDE_TOOLS) == 13 + 13 + 2
 
 
 def test_ui_pcb_tools_are_not_in_claude_registry() -> None:

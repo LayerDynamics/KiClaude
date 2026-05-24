@@ -30,6 +30,7 @@ from .tools.place import kc_footprint_place_hint, kc_footprint_remove
 from .tools.project import kc_project_open, kc_project_save
 from .tools.route import kc_track_remove, kc_track_route
 from .tools.snapshot import kc_snapshot_create, kc_snapshot_revert
+from .tools.sourcing import kc_bom_price, kc_part_search
 from .tools.symbol import kc_symbol_add, kc_symbol_edit
 from .tools.validate import kc_validate
 from .tools.via import kc_via_add_hint
@@ -66,6 +67,11 @@ _CLAUDE_TOOLS = [
     kc_panelize,
     kc_route_freerouting,
     kc_diff,
+    # M3-P-06 sourcing tools — Claude-facing surface over the
+    # `kc_mcp.distributors` aggregator (Digi-Key today via M3-P-03;
+    # Mouser/Octopart/JLCPCB plug in via the same ABC under M3-P-01/02/04).
+    kc_part_search,
+    kc_bom_price,
 ]
 
 
