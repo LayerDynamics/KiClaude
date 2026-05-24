@@ -416,4 +416,114 @@ async def project_get(project_id: str) -> dict[str, Any]:
     }
 
 
+# ----------------------------------------------------------------
+# M3-T-08 — BOM pricing endpoint. The React `BomView` panel hits
+# this via the gateway. It walks the project's footprints, groups
+# by MPN with summed quantity, and runs the M3-P-05 aggregator
+# (Digi-Key today via M3-P-03; Mouser / Octopart / JLCPCB plug
+# in via the same `DistributorAdapter` ABC as M3-P-01/02/04 land).
+# ----------------------------------------------------------------
+
+
+def _bom_lines_from_project(project: dict[str, Any]) -> list[tuple[str, int]]:
+    """Sum every footprint's `mpn` into a `[(mpn, qty)]` list.
+    Footprints without an MPN are skipped (they're un-sourced parts
+    the user hasn't filled in yet — the BOM panel still shows them
+    elsewhere but they don't contribute to pricing)."""
+    pcb = project.get("pcb") or {}
+    counts: dict[str, int] = {}
+    for fp in pcb.get("footprints") or []:
+        mpn_raw = fp.get("mpn")
+        if not isinstance(mpn_raw, str):
+            continue
+        mpn = mpn_raw.strip()
+        if not mpn:
+            continue
+        counts[mpn] = counts.get(mpn, 0) + 1
+    return sorted(counts.items(), key=lambda pair: pair[0])
+
+
+@app.get("/project/{project_id}/bom/price")
+async def project_bom_price(
+    project_id: str,
+    force_refresh: bool = False,
+    qty_multiplier: int = 1,
+) -> dict[str, Any]:
+    """Price every MPN on the project's BOM via the M3-P-05
+    `PriceAggregator`. `qty_multiplier` scales each line — set to
+    100 to price 100 boards in one shot.
+
+    Returns:
+    ```
+    {
+      ok: True,
+      project_id: ...,
+      bom_lines: [{mpn, qty, refdes_count}],
+      pricing: { parts: [...], distributor_totals_usd, grand_total_usd, missing_mpns, errors },
+    }
+    ```
+    """
+    from kc_mcp.distributors import build_default_aggregator
+
+    opened = REGISTRY.get(project_id)
+    if opened is None:
+        raise HTTPException(status_code=404, detail=f"unknown project_id: {project_id}")
+    if qty_multiplier < 1:
+        raise HTTPException(status_code=400, detail="qty_multiplier must be >= 1")
+
+    lines = _bom_lines_from_project(opened.project)
+    scaled = [(mpn, count * qty_multiplier) for (mpn, count) in lines]
+
+    aggregator = build_default_aggregator()
+    try:
+        bom_pricing = await aggregator.price_bom(scaled, force_refresh=force_refresh)
+    finally:
+        await aggregator.aclose()
+
+    def _pricing_payload() -> dict[str, Any]:
+        parts: list[dict[str, Any]] = []
+        for part in bom_pricing.parts:
+            cheapest = part.cheapest
+            parts.append(
+                {
+                    "mpn": part.mpn,
+                    "requested_qty": part.requested_qty,
+                    "cheapest": (
+                        {
+                            "distributor": cheapest.distributor,
+                            "distributor_sku": cheapest.distributor_sku,
+                            "manufacturer": cheapest.manufacturer,
+                            "description": cheapest.description,
+                            "in_stock_qty": cheapest.in_stock_qty,
+                            "lifecycle": cheapest.lifecycle,
+                            "product_url": cheapest.product_url,
+                            "unit_price_usd": part.cheapest_unit_price_usd,
+                        }
+                        if cheapest is not None
+                        else None
+                    ),
+                    "line_total_usd": part.line_total_usd,
+                    "errors": dict(part.errors),
+                    "quote_count": len(part.quotes),
+                }
+            )
+        return {
+            "parts": parts,
+            "distributor_totals_usd": dict(bom_pricing.distributor_totals_usd),
+            "grand_total_usd": bom_pricing.grand_total_usd,
+            "missing_mpns": list(bom_pricing.missing_mpns),
+            "errors": {k: list(v) for k, v in bom_pricing.errors.items()},
+        }
+
+    return {
+        "ok": True,
+        "project_id": project_id,
+        "bom_lines": [
+            {"mpn": mpn, "qty": count * qty_multiplier, "refdes_count": count}
+            for (mpn, count) in lines
+        ],
+        "pricing": _pricing_payload(),
+    }
+
+
 __all__ = ["app"]
