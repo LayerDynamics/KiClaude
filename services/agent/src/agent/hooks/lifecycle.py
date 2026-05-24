@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+from agent import activity
 from agent.telemetry import tracer
 
 # In-process map: tool_use_id → (started_at_monotonic, project_id) so
@@ -123,6 +124,16 @@ async def pre_tool_use(
                 "project_id": project_id,
             }
         )
+    # M3-T-09: feed the live SubagentActivityPanel registry alongside
+    # the JSONL sink. Late tool_use_ids without a SessionStart get a
+    # synthetic session record so the panel still shows the call.
+    await activity.registry().record_tool_start(
+        tool_use_id=tool_use_id,
+        session_id=input_data.get("session_id", "") or "",
+        tool_name=tool_name,
+        project_id=project_id,
+        parent_session_id=_parent_session_id(input_data),
+    )
     # Empty dict = "no decision, proceed normally" per SDK contract.
     return {}
 
@@ -163,6 +174,11 @@ async def post_tool_use(
                 "ok": ok,
             }
         )
+    await activity.registry().record_tool_end(
+        tool_use_id=tool_use_id,
+        ok=ok,
+        duration_ms=duration_ms,
+    )
     return {}
 
 
@@ -190,6 +206,11 @@ async def session_start(
                 "agent_id": input_data.get("agent_id", ""),
             }
         )
+    await activity.registry().record_session_start(
+        session_id=input_data.get("session_id", "") or "",
+        agent_id=input_data.get("agent_id", "") or "",
+        parent_session_id=_parent_session_id(input_data),
+    )
     return {}
 
 
@@ -213,6 +234,9 @@ async def session_end(
                 "session_id": input_data.get("session_id", ""),
             }
         )
+    await activity.registry().record_session_end(
+        session_id=input_data.get("session_id", "") or "",
+    )
     return {}
 
 

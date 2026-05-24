@@ -22,7 +22,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from agent import __version__, ask_user, auth
+from agent import __version__, activity, ask_user, auth
 
 log = structlog.get_logger(__name__)
 
@@ -166,6 +166,36 @@ async def ask_user_cancel(question_id: str) -> dict[str, Any]:
             detail=f"no pending question with id {question_id!r}",
         )
     log.info("ask_user_cancelled", question_id=question_id)
+    return {"ok": True}
+
+
+# ----------------------------------------------------------------
+# M3-T-09 — Subagent activity panel data source.
+#
+# The React `SubagentActivityPanel` polls `/activity/snapshot` and
+# passes back the highest `seq` it has seen as `since`; the registry
+# returns only entries with `seq > since`, so the panel re-renders
+# only the changed rows on each tick. A 1000 ms cadence is more than
+# enough for human-eye refresh and keeps the gateway round-trip cheap
+# even for chatty subagents.
+# ----------------------------------------------------------------
+
+
+@app.get("/activity/snapshot")
+async def activity_snapshot(since: int | None = None) -> dict[str, Any]:
+    """Return all session + tool-call records with `seq > since`. The
+    panel uses the response's `high_water_seq` as next round's
+    `since` parameter."""
+    snap = await activity.registry().snapshot(since_seq=since)
+    return {"ok": True, **snap}
+
+
+@app.delete("/activity")
+async def activity_clear() -> dict[str, Any]:
+    """Reset the registry — used by tests and (rarely) the panel's
+    "Clear" button. Production never calls this; the ring buffer
+    rolls itself over."""
+    activity.reset_registry_for_tests()
     return {"ok": True}
 
 
