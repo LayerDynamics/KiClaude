@@ -499,7 +499,7 @@ def _merge_hits(
 
 
 @app.get("/project/{project_id}/library/search")
-async def project_library_search(
+def project_library_search(
     project_id: str, query: str, limit: int = 25
 ) -> dict[str, Any]:
     """Ranked symbol-library search for the opened project (FR-040/FR-041).
