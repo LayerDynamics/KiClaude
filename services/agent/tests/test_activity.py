@@ -15,8 +15,6 @@ Two layers of coverage:
 from __future__ import annotations
 
 import pytest
-from fastapi.testclient import TestClient
-
 from agent import activity
 from agent.hooks.lifecycle import (
     post_tool_use,
@@ -25,6 +23,7 @@ from agent.hooks.lifecycle import (
     session_start,
 )
 from agent.main import app
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture(autouse=True)

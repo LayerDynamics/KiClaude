@@ -3,8 +3,6 @@ and wired into the parent ClaudeAgentOptions via `bridge.build_options`."""
 
 from __future__ import annotations
 
-from claude_agent_sdk import AgentDefinition
-
 from agent.bridge import build_options
 from agent.subagents import (
     BOM_SOURCER,
@@ -12,6 +10,7 @@ from agent.subagents import (
     PLACEMENT_EXPLORER,
     all_subagents,
 )
+from claude_agent_sdk import AgentDefinition
 
 
 def test_registry_has_three_named_agents() -> None:
@@ -89,6 +88,7 @@ async def test_subagent_dispatch_propagates_parent_session_id_via_otel() -> None
     `parent_session_id` off the hook input — this test pins the
     contract by simulating a hook input that names one of the
     registered subagents and verifying the span attribute is set."""
+    from agent.hooks.lifecycle import pre_tool_use
     from opentelemetry import trace
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import (
@@ -97,8 +97,6 @@ async def test_subagent_dispatch_propagates_parent_session_id_via_otel() -> None
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
         InMemorySpanExporter,
     )
-
-    from agent.hooks.lifecycle import pre_tool_use
 
     exporter = InMemorySpanExporter()
     provider = TracerProvider()

@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import pytest
-
-from kiserver.dfm import known_targets, run_dfm_check, get_preset
+from kiserver.dfm import get_preset, known_targets, run_dfm_check
 
 
 def _project_with(tracks=(), vias=(), net_classes=()):

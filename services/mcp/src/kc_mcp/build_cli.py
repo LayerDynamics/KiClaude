@@ -171,7 +171,7 @@ async def run_build(
         )
         pipeline_ok = False
 
-    # 3–5. exports (gerbers + drill + pos)
+    # 3-5. exports (gerbers + drill + pos)
     if not skip_export and pcb is not None:
         from kiconnector.export import export_drill, export_gerbers, export_pos
 
@@ -302,8 +302,12 @@ def _build_argparser() -> argparse.ArgumentParser:
         help="Output directory for fab artifacts (defaults to <project>/dist).",
     )
     p.add_argument("--json", action="store_true", help="Emit JSON instead of the human report.")
-    p.add_argument("--no-color", action="store_true", help="Disable ANSI color in the human report.")
-    p.add_argument("--skip-erc", action="store_true", help="Skip the ERC pass in the validate stage.")
+    p.add_argument(
+        "--no-color", action="store_true", help="Disable ANSI color in the human report."
+    )
+    p.add_argument(
+        "--skip-erc", action="store_true", help="Skip the ERC pass in the validate stage."
+    )
     p.add_argument("--skip-drc", action="store_true", help="Skip the DRC stage.")
     p.add_argument("--skip-export", action="store_true", help="Skip the fab-export stages.")
     return p
