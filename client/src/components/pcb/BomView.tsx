@@ -95,6 +95,7 @@ export function BomView(props: BomViewProps) {
   const [pricing, setPricing] = useState<BomPricing | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const lastRequestId = useRef(0);
 
   const load = useCallback(
     async (force: boolean) => {
