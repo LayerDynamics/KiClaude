@@ -113,6 +113,7 @@ describe("CrdtHub", () => {
     const r2 = hub.room("p1");
     expect(r1).toBe(r2);
     expect(hub.roomCount).toBe(1);
+    hub.release("p1");
     hub.release("p1"); // no connections → dropped
     expect(hub.roomCount).toBe(0);
   });
