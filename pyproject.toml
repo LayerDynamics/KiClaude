@@ -59,7 +59,7 @@ namespace_packages = true
 explicit_package_bases = true
 
 [[tool.mypy.overrides]]
-module = ["ki_native.*", "claude_agent_sdk.*", "mcp.*"]
+module = ["ki_native.*", "claude_agent_sdk.*", "mcp.*", "boto3.*", "botocore.*", "moto.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

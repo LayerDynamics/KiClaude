@@ -18,7 +18,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-
 Severity = Literal["error", "warning"]
 
 
@@ -257,9 +256,9 @@ def run_dfm_check(
 
 
 __all__ = [
+    "PRESETS",
     "DfmIssue",
     "FabRules",
-    "PRESETS",
     "get_preset",
     "known_targets",
     "run_dfm_check",

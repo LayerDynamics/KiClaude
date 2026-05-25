@@ -113,6 +113,31 @@ _DEFAULT_MUTATING_PREFIXES = (
 )
 _DEFAULT_MUTATING_NAMES = frozenset({"kc_project_save"})
 
+# SPEC §11 M5: `pcb.signoff.*` review gates are a deliberate human act —
+# "the LLM cannot flip them". Any Claude-originated tool call carrying one
+# of these keys is hard-denied, even in trusted mode. Cleared only via the
+# human UI (kiserver) path, never through the agent.
+_SIGNOFF_GUARD_KEYS = frozenset(
+    {"signoff", "rf_reviewed", "ddr_reviewed", "bga_fanout_reviewed"}
+)
+
+
+def targets_signoff(tool_input: Any) -> bool:
+    """`True` if `tool_input` (recursively) carries a `pcb.signoff`
+    review-flag key — i.e. a Claude tool is trying to set a human
+    sign-off gate. Pure + recursive so nested payloads can't smuggle it
+    past the gate."""
+    if isinstance(tool_input, dict):
+        for key, value in tool_input.items():
+            if isinstance(key, str) and key in _SIGNOFF_GUARD_KEYS:
+                return True
+            if targets_signoff(value):
+                return True
+        return False
+    if isinstance(tool_input, (list, tuple)):
+        return any(targets_signoff(item) for item in tool_input)
+    return False
+
 
 async def _default_approval_provider(
     *,
@@ -248,6 +273,24 @@ async def permission_hook(
     tool_name = input_data.get("tool_name", "")
     project_id = _extract_project_id(input_data)
     session_id = input_data.get("session_id", "") or ""
+    tool_input = input_data.get("tool_input", {}) or {}
+
+    # M5 hard gate: Claude can never flip a `pcb.signoff` review flag,
+    # not even in trusted mode. This takes precedence over every other
+    # classification.
+    if targets_signoff(tool_input):
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": PermissionDecision.DENY.value,
+                "permissionDecisionReason": (
+                    "Design sign-off (pcb.signoff.*) is a human-only review gate "
+                    "(SPEC §11 M5); Claude cannot set it. Ask the user to tick it "
+                    "in the UI."
+                ),
+            }
+        }
+
     decision = classify_tool(tool_name, settings)
     if decision is PermissionDecision.ASK:
         provider = approval_provider or _APPROVAL_PROVIDER

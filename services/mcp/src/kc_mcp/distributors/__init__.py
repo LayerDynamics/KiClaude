@@ -36,6 +36,9 @@ from .base import (
 )
 from .cache import DEFAULT_TTL, PriceCache
 from .digikey import DigiKeyAdapter
+from .jlcpcb import JlcpcbAdapter
+from .mouser import MouserAdapter
+from .octopart import OctopartAdapter
 
 __all__ = [
     "DEFAULT_TTL",
@@ -45,6 +48,9 @@ __all__ = [
     "DistributorAuthError",
     "DistributorError",
     "DistributorTransportError",
+    "JlcpcbAdapter",
+    "MouserAdapter",
+    "OctopartAdapter",
     "PartPricing",
     "PartQuote",
     "PriceAggregator",

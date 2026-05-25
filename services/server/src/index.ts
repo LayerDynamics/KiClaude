@@ -6,7 +6,8 @@ import { aggregateHealth } from "./health.js";
 import { defaultBackends, forwardRequest } from "./proxy.js";
 import { registerApprovalRoutes } from "./routes/approval.js";
 import { registerUiToolRoutes } from "./routes/ui_tools.js";
-import { registerWebSocketRoutes } from "./ws.js";
+import { CrdtHub, multiplayerEnabled } from "./crdt.js";
+import { registerCrdtRoutes, registerWebSocketRoutes } from "./ws.js";
 
 const SERVER_VERSION = "0.1.0";
 const DEFAULT_PORT = Number.parseInt(process.env.KICLAUDE_GATEWAY_PORT ?? "8080", 10);
@@ -62,6 +63,12 @@ export function startServer(port: number = DEFAULT_PORT): { close: () => void } 
   const app = createApp();
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
   registerWebSocketRoutes(app, upgradeWebSocket as never);
+  // FR-081 multiplayer relay — opt-in (off by default, FP#8). See
+  // ADR-0001 (Yjs) + `crdt.ts`.
+  if (multiplayerEnabled()) {
+    registerCrdtRoutes(app, upgradeWebSocket as never, new CrdtHub());
+    process.stdout.write("kiclaude-server: CRDT multiplayer enabled (/crdt/:projectId)\n");
+  }
 
   const server = serve({ fetch: app.fetch, port });
   injectWebSocket(server);

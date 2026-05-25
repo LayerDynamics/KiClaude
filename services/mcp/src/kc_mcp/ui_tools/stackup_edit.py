@@ -190,4 +190,4 @@ def ui_stackup_set(
     }
 
 
-__all__ = ["ui_stackup_set", "ALLOWED_KINDS"]
+__all__ = ["ALLOWED_KINDS", "ui_stackup_set"]

@@ -38,6 +38,7 @@ import type {
   Schematic,
   Sheet,
   SheetPin,
+  Signoff,
   Stackup,
   StackupLayer,
   StackupLayerKind,
@@ -82,10 +83,9 @@ describe("kcir/index.ts barrel", () => {
   it("finds the full KCIR file set on disk", () => {
     // Sanity-check the discovery — if this number ever changes the
     // ts-rs generator added or dropped a type and the rest of this
-    // file needs auditing. Last bumped 2026-05-23 by M3-T-03 (TS
-    // bindings resync added DiffPair, LengthGroup, FootprintCourtyard,
-    // Model3D, Pad — five new types).
-    expect(files.length).toBe(43);
+    // file needs auditing. Last bumped 2026-05-25 by the M5 signoff
+    // migration (KCIR 0.4 → 0.5 added Signoff — one new type).
+    expect(files.length).toBe(44);
   });
 
   it.each(files)("index.ts re-exports %s", (filename) => {
@@ -119,6 +119,17 @@ function assertKeys<T extends object>(actual: T, expected: readonly (keyof T)[])
     expect(actual).toHaveProperty(String(key));
   }
 }
+
+describe("Signoff", () => {
+  const fx: Signoff = {
+    rf_reviewed: false,
+    ddr_reviewed: true,
+    bga_fanout_reviewed: false,
+  };
+  it("has every documented key", () => {
+    assertKeys(fx, ["rf_reviewed", "ddr_reviewed", "bga_fanout_reviewed"]);
+  });
+});
 
 describe("BomPolicy", () => {
   const fx: BomPolicy = {
@@ -476,6 +487,7 @@ describe("Pcb", () => {
       nets: [],
       diff_pairs: [],
       length_groups: [],
+      signoff: { rf_reviewed: false, ddr_reviewed: false, bga_fanout_reviewed: false },
     };
     assertKeys(fx, [
       "version",
@@ -495,6 +507,7 @@ describe("Pcb", () => {
       "nets",
       "diff_pairs",
       "length_groups",
+      "signoff",
     ]);
   });
 });
@@ -964,6 +977,7 @@ describe("examples/blinky round-trip", () => {
         net_classes: [],
         diff_pairs: [],
         length_groups: [],
+        signoff: { rf_reviewed: false, ddr_reviewed: false, bga_fanout_reviewed: false },
         layers: [
           { id: 0, name: "F.Cu", kind: "signal", purpose: "user" },
           { id: 31, name: "B.Cu", kind: "signal", purpose: "user" },

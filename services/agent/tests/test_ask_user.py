@@ -12,10 +12,9 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from fastapi.testclient import TestClient
-
 from agent import ask_user
 from agent.main import app
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture(autouse=True)

@@ -28,17 +28,18 @@
 // All `as f64` casts in this module are on small `usize` indices into
 // segment lists (≤ 100) used for trig angles. The cast cannot lose
 // precision at any value we will ever hit.
-#![allow(clippy::cast_precision_loss)]
+// `*_segs` helpers cast a positive, bounded segment count (≤ a few
+// thousand) from `f64` to `usize` — it cannot truncate meaningfully or
+// lose a sign.
+#![allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
 
 use serde::{Deserialize, Serialize};
 
 use crate::geom::{Point, Polygon};
-
-/// Approximation count for circular arcs in pad shapes. 64 segments
-/// per full circle keeps the sagitta error below `0.001 mm` for
-/// 1 mm-radius pads — comfortably inside the M2-R-05 `0.01 mm`
-/// fidelity gate.
-const CIRCLE_SEGMENTS: usize = 64;
 
 /// Pad copper shape. `KiCad` has a couple more (oval, custom) but the
 /// four below cover ≥99% of real boards' thermal-relief candidates.
@@ -275,9 +276,7 @@ pub fn compute_thermal_relief(
 #[must_use]
 pub fn inflate_pad(center: Point, pad: PadShape, rot_deg: f64, delta_mm: f64) -> Polygon {
     let local = match pad {
-        PadShape::Circle { radius_mm } => {
-            circle_polygon((0.0, 0.0), radius_mm + delta_mm, CIRCLE_SEGMENTS)
-        }
+        PadShape::Circle { radius_mm } => kicad_circle_outside((0.0, 0.0), radius_mm + delta_mm),
         PadShape::Rect { size_mm } => {
             // Minkowski sum of an axis-aligned rect with a disc of
             // radius `delta_mm` → a (w+2δ) × (h+2δ) rounded rect with
@@ -409,21 +408,64 @@ fn build_spokes(
     spokes
 }
 
-/// Polygon approximation of a circle at the local origin.
-fn circle_polygon(center: (f64, f64), radius: f64, segments: usize) -> Polygon {
-    let mut pts = Vec::with_capacity(segments);
-    let step = std::f64::consts::TAU / (segments as f64);
-    for i in 0..segments {
-        let a = step * (i as f64);
-        let (s, c) = a.sin_cos();
-        pts.push(Point::new(center.0 + c * radius, center.1 + s * radius));
+/// `KiCad`'s max approximation error for arc tessellation
+/// (`BOARD_DESIGN_SETTINGS::m_MaxError`, default 5 µm). Matching it makes
+/// our keepout polygons land on the same vertex count `KiCad` emits.
+const KICAD_MAX_ERROR_MM: f64 = 0.005;
+
+/// `KiCad`'s `GetArcToSegmentCount` for a full circle, rounded up to a
+/// multiple of 4 (`KiCad` keeps full-circle vertex counts 4-fold
+/// symmetric). `n = ceil(2π / (2·acos(1 − err/r)))` then round up.
+fn kicad_full_circle_segs(radius_mm: f64) -> usize {
+    if radius_mm <= KICAD_MAX_ERROR_MM {
+        return 4;
+    }
+    let inc = 2.0 * (1.0 - KICAD_MAX_ERROR_MM / radius_mm).acos();
+    let raw = (std::f64::consts::TAU / inc).ceil() as usize;
+    raw.div_ceil(4) * 4
+}
+
+/// `KiCad`'s `GetArcToSegmentCount` for an arc of `arc_rad` radians (not
+/// rounded — used per 90° rounded-rect corner).
+fn kicad_arc_segs(radius_mm: f64, arc_rad: f64) -> usize {
+    if radius_mm <= KICAD_MAX_ERROR_MM {
+        return 1;
+    }
+    let inc = 2.0 * (1.0 - KICAD_MAX_ERROR_MM / radius_mm).acos();
+    ((arc_rad.abs() / inc).ceil() as usize).max(1)
+}
+
+/// `KiCad`'s `TransformCircleToPolygon` with `ERROR_LOC::ERROR_OUTSIDE`:
+/// the polygon circumscribes the true circle — segment midpoints lie on
+/// the circle and vertices bulge outward by the radius correction
+/// `r / cos(step/2)`, with a half-step phase so a flat side (not a
+/// vertex) points along +X. Every keepout (clearance hole, thermal gap,
+/// drill) uses this so the pour clears obstacles by at least the
+/// requested distance, exactly as `KiCad`'s reference fills do.
+fn kicad_circle_outside(center: (f64, f64), radius: f64) -> Polygon {
+    let n = kicad_full_circle_segs(radius);
+    let step = std::f64::consts::TAU / (n as f64);
+    let r_corr = radius / (step * 0.5).cos();
+    let mut pts = Vec::with_capacity(n);
+    for i in 0..n {
+        let angle = step * (i as f64 + 0.5);
+        let (sin, cos) = angle.sin_cos();
+        pts.push(Point::new(center.0 + cos * r_corr, center.1 + sin * r_corr));
     }
     Polygon::new(pts)
 }
 
 /// Polygon approximation of a rounded rectangle centered at the local
-/// origin. `size = (width, height)`. Each corner uses
-/// `CIRCLE_SEGMENTS / 4` arc segments.
+/// origin, matching `KiCad`'s `TransformRoundChamferedRectToPolygon`
+/// with `ERROR_LOC::ERROR_OUTSIDE`. `size = (width, height)`.
+///
+/// Each 90° corner uses `KiCad`'s arc segment count and the half-step
+/// circumscribing construction: vertices sit at `r / cos(step/2)` and
+/// at half-step angles, which makes each corner arc's extreme vertices
+/// land exactly on the straight edge lines (`x = ±hw`, `y = ±hh`), so
+/// the flat sides need no separate vertices and stay at the exact
+/// offset while the rounded corners conservatively contain the true
+/// arc — the same keepout boundary `KiCad` emits.
 fn rounded_rect_polygon(size: (f64, f64), radius: f64) -> Polygon {
     let hw = size.0 / 2.0;
     let hh = size.1 / 2.0;
@@ -436,10 +478,11 @@ fn rounded_rect_polygon(size: (f64, f64), radius: f64) -> Polygon {
             Point::new(-hw, hh),
         ]);
     }
-    let corner_segs = (CIRCLE_SEGMENTS / 4).max(1);
+    let corner_segs = kicad_arc_segs(r, std::f64::consts::FRAC_PI_2);
     let step = std::f64::consts::FRAC_PI_2 / (corner_segs as f64);
-    let mut pts = Vec::with_capacity(corner_segs * 4 + 4);
-    // CCW from bottom-right corner's arc center.
+    let r_corr = r / (step * 0.5).cos();
+    let mut pts = Vec::with_capacity(corner_segs * 4);
+    // CCW from the bottom-right corner's arc centre.
     let corners = [
         (hw - r, -hh + r, -std::f64::consts::FRAC_PI_2),
         (hw - r, hh - r, 0.0),
@@ -447,10 +490,10 @@ fn rounded_rect_polygon(size: (f64, f64), radius: f64) -> Polygon {
         (-hw + r, -hh + r, std::f64::consts::PI),
     ];
     for (cx, cy, start_angle) in corners {
-        for i in 0..=corner_segs {
-            let a = start_angle + step * (i as f64);
+        for i in 0..corner_segs {
+            let a = start_angle + step * (i as f64 + 0.5);
             let (s, c) = a.sin_cos();
-            pts.push(Point::new(cx + c * r, cy + s * r));
+            pts.push(Point::new(cx + c * r_corr, cy + s * r_corr));
         }
     }
     Polygon::new(pts)
@@ -495,17 +538,31 @@ mod tests {
 
     #[test]
     fn smoke_circle_inflate_grows_radius() {
-        let p = inflate_pad(
+        let poly = inflate_pad(
             Point::new(0.0, 0.0),
             PadShape::Circle { radius_mm: 1.0 },
             0.0,
             0.5,
         );
-        // The polygon approximates a circle of radius 1.5. Verify by
-        // checking each vertex is at distance ~1.5 from the origin.
-        for pt in &p.points {
-            let d = (pt.x * pt.x + pt.y * pt.y).sqrt();
-            assert!((d - 1.5).abs() < 1e-9, "vertex distance: {d}");
+        // The polygon approximates a circle of radius 1.5 using KiCad's
+        // ERROR_OUTSIDE construction: vertices circumscribe at
+        // `r / cos(π/n)` and edge midpoints lie on the true circle.
+        let n = poly.points.len();
+        let r_corr = 1.5 / (std::f64::consts::PI / n as f64).cos();
+        for pt in &poly.points {
+            let dist = (pt.x * pt.x + pt.y * pt.y).sqrt();
+            assert!(
+                (dist - r_corr).abs() < 1e-9,
+                "vertex distance {dist} vs {r_corr}"
+            );
+        }
+        // Edge midpoints sit on the radius-1.5 circle (circumscribing).
+        for i in 0..n {
+            let va = poly.points[i];
+            let vb = poly.points[(i + 1) % n];
+            let mid = ((va.x + vb.x) * 0.5, (va.y + vb.y) * 0.5);
+            let dist = (mid.0 * mid.0 + mid.1 * mid.1).sqrt();
+            assert!((dist - 1.5).abs() < 1e-9, "midpoint distance {dist} vs 1.5");
         }
     }
 

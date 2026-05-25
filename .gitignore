@@ -36,6 +36,13 @@ htmlcov/
 pkg/
 **/pkg/
 
+# Stray ts-rs binding exports. TS_RS_EXPORT_DIR resolves relative to the
+# crate manifest dir, so a mis-pathed `TS_RS_EXPORT_DIR=client/src/lib/kcir`
+# run (instead of an absolute path) drops a duplicate KCIR binding tree under
+# crates/. The canonical, tracked bindings live ONLY at client/src/lib/kcir/.
+crates/client/
+crates/*/client/
+
 # KiCad auxiliary project files pcbnew writes alongside .kicad_pcb on save —
 # the .kicad_pcb itself is the load-bearing artifact; `.kicad_prl` is the
 # per-user local prefs sidecar and `_filled.kicad_pro` files are

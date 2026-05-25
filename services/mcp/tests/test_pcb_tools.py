@@ -1477,3 +1477,199 @@ def test_ui_lengthgroup_delete_unknown_returns_error() -> None:
     result = ui_lengthgroup_delete({"pcb": {"length_groups": []}}, name="NoSuchGroup")
     assert result["ok"] is False
     assert "NoSuchGroup" in result["error"]
+
+
+# ---------------------------------------------------------------------
+# M3-T-05 — push-and-shove route apply (ui_shove_apply).
+# ---------------------------------------------------------------------
+
+
+def _shove_project() -> dict[str, Any]:
+    return {
+        "pcb": {
+            "tracks": [
+                {
+                    "uuid": "track-vcc",
+                    "net": "VCC",
+                    "layer": "F.Cu",
+                    "width_mm": 0.25,
+                    "points_mm": [[0.0, 0.3], [10.0, 0.3]],
+                    "locked": False,
+                },
+                {
+                    "uuid": "track-gnd",
+                    "net": "GND",
+                    "layer": "F.Cu",
+                    "width_mm": 0.25,
+                    "points_mm": [[0.0, 0.6], [10.0, 0.6]],
+                    "locked": False,
+                },
+            ],
+        }
+    }
+
+
+def test_ui_shove_apply_adds_new_track_and_moves_shoved_ones() -> None:
+    from kc_mcp.ui_tools import ui_shove_apply
+
+    project = _shove_project()
+    result = ui_shove_apply(
+        project,
+        new_track={
+            "net": "DATA",
+            "layer": "F.Cu",
+            "width_mm": 0.25,
+            "points_mm": [[0.0, 0.0], [10.0, 0.0]],
+        },
+        moved_tracks=[
+            {"uuid": "track-vcc", "points_mm": [[0.0, 0.45], [10.0, 0.45]]},
+            {"uuid": "track-gnd", "points_mm": [[0.0, 0.9], [10.0, 0.9]]},
+        ],
+    )
+    assert result["ok"] is True
+    assert set(result["updated_track_uuids"]) == {"track-vcc", "track-gnd"}
+    assert result["unmatched_track_uuids"] == []
+    tracks = {t["uuid"]: t for t in project["pcb"]["tracks"]}
+    # Moved tracks updated in place.
+    assert tracks["track-vcc"]["points_mm"] == [[0.0, 0.45], [10.0, 0.45]]
+    assert tracks["track-gnd"]["points_mm"] == [[0.0, 0.9], [10.0, 0.9]]
+    # New track appended with a fresh uuid + the routed geometry.
+    new_uuid = result["new_track_uuid"]
+    assert new_uuid in tracks
+    assert tracks[new_uuid]["net"] == "DATA"
+    assert tracks[new_uuid]["points_mm"] == [[0.0, 0.0], [10.0, 0.0]]
+    assert len(project["pcb"]["tracks"]) == 3
+
+
+def test_ui_shove_apply_with_no_moved_tracks_just_adds_the_route() -> None:
+    from kc_mcp.ui_tools import ui_shove_apply
+
+    project = {"pcb": {"tracks": []}}
+    result = ui_shove_apply(
+        project,
+        new_track={
+            "net": "DATA",
+            "layer": "F.Cu",
+            "width_mm": 0.2,
+            "points_mm": [[0.0, 0.0], [5.0, 0.0]],
+        },
+        moved_tracks=[],
+    )
+    assert result["ok"] is True
+    assert result["updated_track_uuids"] == []
+    assert len(project["pcb"]["tracks"]) == 1
+
+
+def test_ui_shove_apply_unmatched_uuid_is_reported_not_fatal() -> None:
+    from kc_mcp.ui_tools import ui_shove_apply
+
+    project = _shove_project()
+    result = ui_shove_apply(
+        project,
+        new_track={
+            "net": "DATA",
+            "layer": "F.Cu",
+            "width_mm": 0.25,
+            "points_mm": [[0.0, 0.0], [10.0, 0.0]],
+        },
+        moved_tracks=[
+            {"uuid": "track-vcc", "points_mm": [[0.0, 0.45], [10.0, 0.45]]},
+            {"uuid": "ghost", "points_mm": [[0.0, 9.0], [10.0, 9.0]]},
+        ],
+    )
+    assert result["ok"] is True
+    assert result["updated_track_uuids"] == ["track-vcc"]
+    assert result["unmatched_track_uuids"] == ["ghost"]
+    # The matched one moved; the new track still got added.
+    assert len(project["pcb"]["tracks"]) == 3
+
+
+def test_ui_shove_apply_requires_new_track() -> None:
+    from kc_mcp.ui_tools import ui_shove_apply
+
+    result = ui_shove_apply({"pcb": {}}, new_track=None, moved_tracks=[])
+    assert result["ok"] is False
+    assert "new_track" in result["error"]
+
+
+def test_ui_shove_apply_rejects_too_few_route_points() -> None:
+    from kc_mcp.ui_tools import ui_shove_apply
+
+    result = ui_shove_apply(
+        {"pcb": {}},
+        new_track={"net": "D", "layer": "F.Cu", "width_mm": 0.2, "points_mm": [[0.0, 0.0]]},
+        moved_tracks=[],
+    )
+    assert result["ok"] is False
+    assert "points_mm" in result["error"]
+
+
+def test_ui_shove_apply_rejects_missing_net_or_layer() -> None:
+    from kc_mcp.ui_tools import ui_shove_apply
+
+    result = ui_shove_apply(
+        {"pcb": {}},
+        new_track={
+            "net": "",
+            "layer": "F.Cu",
+            "width_mm": 0.2,
+            "points_mm": [[0.0, 0.0], [1.0, 0.0]],
+        },
+        moved_tracks=[],
+    )
+    assert result["ok"] is False
+    assert "net" in result["error"]
+
+
+def test_ui_shove_apply_rejects_non_positive_width() -> None:
+    from kc_mcp.ui_tools import ui_shove_apply
+
+    result = ui_shove_apply(
+        {"pcb": {}},
+        new_track={
+            "net": "D",
+            "layer": "F.Cu",
+            "width_mm": 0.0,
+            "points_mm": [[0.0, 0.0], [1.0, 0.0]],
+        },
+        moved_tracks=[],
+    )
+    assert result["ok"] is False
+    assert "width_mm" in result["error"]
+
+
+def test_ui_shove_apply_moved_entry_needs_uuid() -> None:
+    from kc_mcp.ui_tools import ui_shove_apply
+
+    result = ui_shove_apply(
+        _shove_project(),
+        new_track={
+            "net": "D",
+            "layer": "F.Cu",
+            "width_mm": 0.2,
+            "points_mm": [[0.0, 0.0], [1.0, 0.0]],
+        },
+        moved_tracks=[{"points_mm": [[0.0, 0.45], [10.0, 0.45]]}],
+    )
+    assert result["ok"] is False
+    assert "uuid" in result["error"]
+
+
+def test_ui_shove_apply_accepts_xy_object_point_shape() -> None:
+    """The wasm bridge can send `{x, y}` objects as well as `[x, y]`
+    pairs — the tool normalises both."""
+    from kc_mcp.ui_tools import ui_shove_apply
+
+    project = {"pcb": {"tracks": []}}
+    result = ui_shove_apply(
+        project,
+        new_track={
+            "net": "DATA",
+            "layer": "F.Cu",
+            "width_mm": 0.2,
+            "points_mm": [{"x": 0.0, "y": 0.0}, {"x": 5.0, "y": 0.0}],
+        },
+        moved_tracks=[],
+    )
+    assert result["ok"] is True
+    assert project["pcb"]["tracks"][0]["points_mm"] == [[0.0, 0.0], [5.0, 0.0]]

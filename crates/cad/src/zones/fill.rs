@@ -233,16 +233,26 @@ pub fn fill_zone(input: &ZoneFillInput) -> ZoneFillResult {
         }
     }
 
-    let mut obstacle_polys: Vec<Polygon> = foreign_polys.clone();
+    // Base keepouts: foreign clearances + the FULL thermal keepout
+    // (`pad ⊕ gap`, plus the drill disc for THT pads). KiCad does NOT
+    // fill same-net pad copper as a solid — the only copper over the
+    // pad region is the spoke cross, which is unioned back AFTER the
+    // min-thickness opening below. (The spokes are deliberately NOT cut
+    // out of the keepout here: KiCad adds spokes after its
+    // deflate/inflate smoothing pass and they must keep their full
+    // `bridge_width`; cutting them before the opening lets the erode
+    // step narrow them near the pad / drill edge.)
+    let mut base_obstacles: Vec<Polygon> = foreign_polys.clone();
     let mut thermal_spokes: Vec<ThermalSpoke> = Vec::new();
+    let mut spoke_polys: Vec<Polygon> = Vec::new();
+    let mut drill_discs: Vec<Polygon> = Vec::new();
     for (center, shape, rotation_deg, spec, _extra, drill_mm) in &thermal_pad_specs {
-        // Build the GAP ANNULUS keepout (inflated pad minus pad
-        // copper outline) — same-net pad copper is pour-fillable,
-        // so the central pad region is NOT part of the keepout.
-        let inflated = super::thermal::inflate_pad(*center, *shape, *rotation_deg, spec.gap_mm);
-        let pad_polygon = super::thermal::inflate_pad(*center, *shape, *rotation_deg, 0.0);
-        let annulus =
-            super::boolean::polygon_difference(&inflated, std::slice::from_ref(&pad_polygon));
+        base_obstacles.push(super::thermal::inflate_pad(
+            *center,
+            *shape,
+            *rotation_deg,
+            spec.gap_mm,
+        ));
 
         let candidate_spokes = if spec.spoke_count == 0 || spec.spoke_width_mm <= 0.0 {
             Vec::new()
@@ -261,30 +271,12 @@ pub fn fill_zone(input: &ZoneFillInput) -> ZoneFillResult {
             .into_iter()
             .filter(|s| !point_inside_any(s.outer, &foreign_polys))
             .collect();
-        // Cut each annulus piece by the surviving spokes at their
-        // nominal `spec.spoke_width_mm`. KiCad's filler additionally
-        // runs a deflate/inflate (Minkowski closing) on the union of
-        // (pour ∪ spokes) at `min_thickness/2` — that pass narrows
-        // the spoke channel by ~`min_thickness` and rounds the
-        // channel-to-arc corners. Reproducing that exactly requires
-        // implementing KiCad's full smoothing pipeline; we leave the
-        // nominal-width cut here as the architecturally-correct
-        // approximation. See plan task M2-R-05c.
-        let mut pieces = if valid_spokes.is_empty() {
-            annulus
-        } else {
-            let spoke_polys: Vec<Polygon> =
-                valid_spokes.iter().map(ThermalSpoke::to_polygon).collect();
-            let mut cut = Vec::new();
-            for piece in &annulus {
-                cut.extend(super::boolean::polygon_difference(piece, &spoke_polys));
-            }
-            cut
-        };
-        // For through-hole pads, the drill is a mechanical hole — no
-        // pour copper there. Add the drill disc AFTER the spoke cuts
-        // so the spokes (which are copper bridges) cannot carve
-        // through the drill (which is physically a hole).
+        for s in &valid_spokes {
+            spoke_polys.push(s.to_polygon());
+        }
+        // For through-hole pads the drill is a mechanical hole — no
+        // copper there, not even the spoke cross. It is part of the
+        // keepout AND clips the spoke copper unioned in below.
         if *drill_mm > 0.0 {
             let drill_disc = super::thermal::inflate_pad(
                 *center,
@@ -294,25 +286,25 @@ pub fn fill_zone(input: &ZoneFillInput) -> ZoneFillResult {
                 0.0,
                 0.0,
             );
-            pieces.push(drill_disc);
+            base_obstacles.push(drill_disc.clone());
+            drill_discs.push(drill_disc);
         }
-        obstacle_polys.extend(pieces);
         thermal_spokes.extend(valid_spokes);
     }
 
-    // Real boolean difference: `inset - union(obstacles)`. The kernel
-    // unions overlapping obstacles, clips obstacles to the inset
-    // boundary, and produces one polygon per disjoint island.
+    // Base pour: `inset − union(base_obstacles)` (no spokes yet). The
+    // kernel unions overlapping obstacles, clips them to the inset
+    // boundary, and emits one polygon per disjoint island.
     let mut polygons: Vec<Polygon> = Vec::new();
     for inset in &inset_polys {
-        polygons.extend(super::boolean::polygon_difference(inset, &obstacle_polys));
+        polygons.extend(super::boolean::polygon_difference(inset, &base_obstacles));
     }
 
-    // Minimum-thickness filter: erode then dilate by half the minimum
-    // (Minkowski opening). Anything narrower than `min_thickness_mm`
-    // shrinks to nothing on the erode step and never comes back.
-    // Uses the rounded offsets so the filtered output keeps `KiCad`'s
-    // arc-decomposed corner shape.
+    // Minimum-thickness opening: erode then dilate by half the minimum
+    // (Minkowski opening). Removes copper thinner than `min_thickness`
+    // and rounds convex corners with the arc-decomposed offset, matching
+    // KiCad's deflate/inflate smoothing pass. Applied to the spoke-FREE
+    // pour so it cannot narrow the spokes.
     let min_thickness = input.min_thickness_mm.max(0.0);
     if min_thickness > 0.0 {
         let half = min_thickness * 0.5;
@@ -332,6 +324,35 @@ pub fn fill_zone(input: &ZoneFillInput) -> ZoneFillResult {
             }
         }
         polygons = filtered;
+    }
+
+    // Union the thermal spokes back at full `bridge_width`. Each spoke
+    // is clipped to the board inset and has the foreign keepouts and
+    // drill discs removed — a spoke crosses neither a foreign pad's
+    // clearance nor its own drill hole. Because the spokes are added
+    // after the opening, they keep full width right up to the pad /
+    // drill edge, matching KiCad's reference geometry.
+    if !spoke_polys.is_empty() {
+        let spoke_union = super::boolean::polygon_union(&spoke_polys);
+        let mut clip = foreign_polys.clone();
+        clip.extend(drill_discs.iter().cloned());
+        let mut spoke_copper: Vec<Polygon> = Vec::new();
+        for sp in &spoke_union {
+            let mut inset_clipped: Vec<Polygon> = Vec::new();
+            for inset in &inset_polys {
+                inset_clipped.extend(super::boolean::polygon_intersection(sp, inset));
+            }
+            for piece in &inset_clipped {
+                if clip.is_empty() {
+                    spoke_copper.push(piece.clone());
+                } else {
+                    spoke_copper.extend(super::boolean::polygon_difference(piece, &clip));
+                }
+            }
+        }
+        let mut all = polygons;
+        all.extend(spoke_copper);
+        polygons = super::boolean::polygon_union(&all);
     }
 
     ZoneFillResult {
@@ -373,7 +394,7 @@ fn inflate_obstacle(geom: &ObstacleGeometry, delta_mm: f64) -> Polygon {
 
 /// Approximate inflation of a track segment by `delta_mm`. The exact
 /// shape is a "stadium" (rectangle + two semicircles); we emit it as a
-/// polygon with `CIRCLE_SEGMENTS / 2 + 2` vertices per end-cap.
+/// polygon with `ENDCAP_SEGMENTS + 1` vertices per end-cap.
 fn inflate_track(start: Point, end: Point, width_mm: f64, delta_mm: f64) -> Polygon {
     const ENDCAP_SEGMENTS: usize = 12;
     let half = width_mm / 2.0 + delta_mm;

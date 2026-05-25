@@ -22,9 +22,14 @@
 //! conversion helpers [`to_overlay_shape`] / [`from_overlay_shape`]
 //! handle the reversal transparently.
 
-// `as f64` casts on small `usize` segment indices (≤ 64) used for
-// arc-tessellation angles cannot lose precision at any value we hit.
-#![allow(clippy::cast_precision_loss)]
+// `as f64` casts on small `usize` segment indices used for
+// arc-tessellation angles cannot lose precision at any value we hit;
+// `disc_polygon`'s `f64 → usize` segment count is positive and bounded.
+#![allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
 
 use i_overlay::core::fill_rule::FillRule;
 use i_overlay::core::overlay_rule::OverlayRule;
@@ -249,10 +254,27 @@ fn minkowski_disc_primitives(ring: &[Point], delta_mm: f64) -> Vec<Polygon> {
     prims
 }
 
-/// Polygon approximation of a disc with `segments` arc segments. Used
-/// by [`minkowski_disc_primitives`] and the round-corner offset
-/// helpers.
-fn disc_polygon(center: Point, radius: f64, segments: usize) -> Polygon {
+/// `KiCad`'s max arc-approximation error (`m_MaxError`, 5 µm). The
+/// `SHAPE_POLY_SET::Inflate`/`Deflate` round-join arcs that the
+/// min-thickness opening mirrors are tessellated to this error, so the
+/// corner-disc segment count must derive from it (not a fixed count) to
+/// land on `KiCad`'s reference boundary.
+const KICAD_MAX_ERROR_MM: f64 = 0.005;
+
+/// Polygon approximation of a disc. The segment count matches `KiCad`'s
+/// `GetArcToSegmentCount(radius, m_MaxError, 360°)` (rounded up to a
+/// multiple of 4); vertices sit ON the circle (inscribed, phase 0) like
+/// a Clipper `jtRound` join — the construction `KiCad`'s `Inflate` uses
+/// for the min-thickness smoothing pass, as opposed to the
+/// circumscribing `ERROR_OUTSIDE` form used for pad keepouts. The
+/// `_min_segments` floor keeps tiny-radius discs from degenerating.
+fn disc_polygon(center: Point, radius: f64, _min_segments: usize) -> Polygon {
+    let segments = if radius <= KICAD_MAX_ERROR_MM {
+        4
+    } else {
+        let inc = 2.0 * (1.0 - KICAD_MAX_ERROR_MM / radius).acos();
+        ((std::f64::consts::TAU / inc).ceil() as usize).div_ceil(4) * 4
+    };
     let mut pts = Vec::with_capacity(segments);
     let step = std::f64::consts::TAU / (segments as f64);
     for i in 0..segments {

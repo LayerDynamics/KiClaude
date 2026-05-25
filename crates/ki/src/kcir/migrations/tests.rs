@@ -169,12 +169,94 @@ fn migrate_v0_3_fills_diff_pairs_and_length_groups_on_pcb() {
     });
     migrate_to_current(&mut doc).expect("migrate");
 
-    assert_eq!(doc["kcir_version"], "0.4.0");
+    // A 0.3 doc migrates all the way up to the current version: v0_4
+    // adds diff_pairs/length_groups, v0_5 adds pcb.signoff.
+    assert_eq!(doc["kcir_version"], crate::KCIR_VERSION);
     assert_eq!(doc["pcb"]["diff_pairs"], json!([]));
     assert_eq!(doc["pcb"]["length_groups"], json!([]));
+    assert_eq!(
+        doc["pcb"]["signoff"],
+        json!({ "rf_reviewed": false, "ddr_reviewed": false, "bga_fanout_reviewed": false })
+    );
 
     // And it must deserialize cleanly into the current `Project`.
     let _project: Project = serde_json::from_value(doc).expect("deserialize migrated doc");
+}
+
+#[test]
+fn migrate_v0_4_fills_signoff_on_pcb() {
+    // A 0.4-shaped document — has the M3-R-07 diff_pairs/length_groups
+    // collections but lacks the M5 `pcb.signoff` gate object.
+    let mut doc = json!({
+        "kcir_version": "0.4.0",
+        "name": "usb_eth_phy",
+        "schematic": { "sheets": [], "lib_symbols": [], "symbols": [], "wires": [],
+                        "junctions": [], "labels": [], "no_connects": [], "buses": [] },
+        "pcb": {
+            "version": 0, "generator": "", "thickness_mm": 0.0, "paper": "",
+            "pad_to_mask_clearance_mm": 0.0, "solder_mask_min_width_mm": 0.0,
+            "net_classes": [], "layers": [], "footprints": [],
+            "tracks": [], "vias": [], "zones": [],
+            "outline": { "points_mm": [], "cutouts": [] }, "drawings": [], "nets": [],
+            "diff_pairs": [], "length_groups": []
+        },
+        "libraries": { "symbol_libs": [], "footprint_libs": [] },
+        "stackup": { "layers": [], "power_plane_layers": [], "controlled_impedance": false,
+                      "board_thickness_mm": 0.0, "finish": "" },
+        "design_rules": { "clearance_mm": 0.0, "trace_width_mm": 0.0, "via_drill_mm": 0.0,
+                           "via_diameter_mm": 0.0, "uvia_drill_mm": 0.0, "uvia_diameter_mm": 0.0,
+                           "allow_microvias": false, "allow_blind_buried_vias": false },
+        "net_classes": [], "fab_target": null,
+        "bom_policy": { "preferred_distributors": [], "max_unit_price_usd": null,
+                         "require_in_stock": false, "require_jlc_assembly": false, "region": "" },
+        "metadata": { "title": "", "revision": "", "company": "", "date": "",
+                       "comment_1": "", "comment_2": "", "comment_3": "", "comment_4": "" }
+    });
+    migrate_to_current(&mut doc).expect("migrate");
+
+    assert_eq!(doc["kcir_version"], "0.5.0");
+    assert_eq!(
+        doc["pcb"]["signoff"],
+        json!({ "rf_reviewed": false, "ddr_reviewed": false, "bga_fanout_reviewed": false })
+    );
+
+    let _project: Project = serde_json::from_value(doc).expect("deserialize migrated doc");
+}
+
+#[test]
+fn migrate_v0_4_preserves_existing_signoff_if_pre_supplied() {
+    // Defence-in-depth: a partially-migrated 0.4 doc that already has a
+    // signoff block must not be stomped by v0_5.
+    let mut doc = json!({
+        "kcir_version": "0.4.0",
+        "name": "x",
+        "schematic": { "sheets": [], "lib_symbols": [], "symbols": [], "wires": [],
+                        "junctions": [], "labels": [], "no_connects": [], "buses": [] },
+        "pcb": {
+            "version": 0, "generator": "", "thickness_mm": 0.0, "paper": "",
+            "pad_to_mask_clearance_mm": 0.0, "solder_mask_min_width_mm": 0.0,
+            "net_classes": [], "layers": [], "footprints": [],
+            "tracks": [], "vias": [], "zones": [],
+            "outline": { "points_mm": [], "cutouts": [] }, "drawings": [], "nets": [],
+            "diff_pairs": [], "length_groups": [],
+            "signoff": { "rf_reviewed": true, "ddr_reviewed": false, "bga_fanout_reviewed": true }
+        },
+        "libraries": { "symbol_libs": [], "footprint_libs": [] },
+        "stackup": { "layers": [], "power_plane_layers": [], "controlled_impedance": false,
+                      "board_thickness_mm": 0.0, "finish": "" },
+        "design_rules": { "clearance_mm": 0.0, "trace_width_mm": 0.0, "via_drill_mm": 0.0,
+                           "via_diameter_mm": 0.0, "uvia_drill_mm": 0.0, "uvia_diameter_mm": 0.0,
+                           "allow_microvias": false, "allow_blind_buried_vias": false },
+        "net_classes": [], "fab_target": null,
+        "bom_policy": { "preferred_distributors": [], "max_unit_price_usd": null,
+                         "require_in_stock": false, "require_jlc_assembly": false, "region": "" },
+        "metadata": { "title": "", "revision": "", "company": "", "date": "",
+                       "comment_1": "", "comment_2": "", "comment_3": "", "comment_4": "" }
+    });
+    migrate_to_current(&mut doc).expect("migrate");
+    assert_eq!(doc["pcb"]["signoff"]["rf_reviewed"], true);
+    assert_eq!(doc["pcb"]["signoff"]["bga_fanout_reviewed"], true);
+    assert_eq!(doc["pcb"]["signoff"]["ddr_reviewed"], false);
 }
 
 #[test]
