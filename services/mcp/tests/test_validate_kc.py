@@ -93,6 +93,14 @@ def test_kc021_rail_with_regulator_clears() -> None:
     assert _codes(_run_validators(proj), "KC021") == []
 
 
+def test_kc021_rail_driven_by_ic_clears() -> None:
+    proj = _project(
+        nets=[{"name": "+3V3"}, {"name": "GND"}],
+        footprints=[_fp("U1", "+3V3", "GND"), _fp("C1", "+3V3", "GND")],
+    )
+    assert _codes(_run_validators(proj), "KC021") == []
+
+
 def test_kc021_rail_with_pwr_flag_clears() -> None:
     proj = _project(
         nets=[{"name": "+3V3"}, {"name": "GND"}],
