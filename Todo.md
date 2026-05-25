@@ -321,7 +321,7 @@ faking, so they're recorded with their blockers, not stubbed.
 - [x] **T1 — `SPEC.md` root redirect** (Todo §10). `SPEC.md` → `docs/specs/SPEC-01-kiclaude.md` (symlink, git mode 120000). ✅
 - [x] **T2 — Resolve SPEC §16.2 P4 status** (Todo §11). P4 row marked RESOLVED → Yjs, pointing at ADR-0001. ✅
 - [x] **T3 — `docs/architecture/` + `docs/observability/`** (Todo §9). Architecture overview (`architecture/README.md`) + OTel collector config + importable Grafana dashboard + README, grounded in the real `agent.hook.*` span contract. JSON/YAML validated. ✅
-- [ ] **T4 — 5 slash commands** (Todo §5). `/board-diff`, `/snapshot`, `/revert` (wrappers over existing `kc_diff`/`kc_snapshot_*`), then `/add-led`, `/add-usb-c`.
+- [x] **T4 — 5 slash commands** (Todo §5). `/snapshot`, `/revert`, `/board-diff`, `/add-led`, `/add-usb-c` added under `.claude/commands/` (registered, verified in the skills list). ✅
 - [ ] **T5 — Design-intent validators** (Todo §2). KC020 (decoupling), KC021 (power-rail source), KC030 (length-match ≥2), KC031 (diff-pair bidirectional), KC040 (impedance achievable), KC050 (partition isolation) in `validate.py`, with unit tests; reconcile the KC001–011 numbering note vs SPEC §7.3.
 - [ ] **T6 — 8 Claude-facing MCP tools** (Todo §1). `kc_diffpair_declare`, `kc_length_match_set`, `kc_impedance_check`, `kc_decoupling_check`, `kc_partition_check`, `kc_bom_get`, `kc_export_step`, `kc_session_fork` — registered in `_CLAUDE_TOOLS`, each with a Pydantic model + integration test; depends on T5.
 - [ ] **T7 — `kc_mpn_resolve` (full)** (Todo §4). Wire to the distributor aggregator (stock) + library indexers (symbol/footprint candidates); depends on T9 for candidates.
