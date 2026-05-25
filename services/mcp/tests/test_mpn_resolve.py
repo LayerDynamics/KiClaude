@@ -70,11 +70,19 @@ async def test_blank_mpn_errors() -> None:
 
 
 async def test_shape_rejection_is_not_found() -> None:
+    # Case 1: does not match the MPN shape at all
     out = _payload(await kc_mpn_resolve.handler({"mpn": "!!!"}))
     assert out["ok"] is True
     assert out["found"] is False
     assert out["reason"] == "not_an_mpn_shape"
     assert out["confidence"] == 0.0
+
+    # Case 2: matches the MPN shape but is missing a digit or a letter
+    out_missing = _payload(await kc_mpn_resolve.handler({"mpn": "ABCDEF"}))
+    assert out_missing["ok"] is True
+    assert out_missing["found"] is False
+    assert out_missing["reason"] == "missing_digit_or_letter"
+    assert out_missing["confidence"] == 0.0
 
 
 async def test_distributor_hit_marks_found_with_stock() -> None:
