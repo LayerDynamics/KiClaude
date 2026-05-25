@@ -596,6 +596,12 @@ def _safe_basename(filename: str) -> str:
 
 
 def _append_lib_table_row(table_path: Path, head: str, name: str, uri: str) -> None:
+    """Append a (lib ...) row to a sym/fp-lib-table, creating the table
+    if absent. No-op when a row with the same uri already exists."""
+    import threading
+    if not hasattr(_append_lib_table_row, "_lock"):
+        _append_lib_table_row._lock = threading.Lock()
+    with _append_lib_table_row._lock:
     """Append a `(lib …)` row to a sym/fp-lib-table, creating the table
     if absent. No-op when a row with the same `uri` already exists."""
     if table_path.is_file():
