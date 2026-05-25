@@ -12,6 +12,9 @@ Endpoints (M0-P-04):
 
 from __future__ import annotations
 
+import json
+import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -108,6 +111,14 @@ class SyncPullRequest(BaseModel):
 
     manifest_key: str = Field(..., min_length=1, max_length=128)
     dest_dir: str = Field(..., min_length=1, max_length=4_096)
+
+
+class SessionForkRequest(BaseModel):
+    """Body for `POST /project/{id}/session/fork` (kc_session_fork). Forks
+    a chat session into a new branch under the project's session store."""
+
+    parent_session_id: str = Field(..., min_length=1, max_length=128)
+    label: str = Field(default="", max_length=200)
 
 
 @app.get("/health")
@@ -440,6 +451,43 @@ async def share_file(token: str, path: str) -> Response:
             status_code=409, detail=f"blob for {path!r} missing from object store"
         )
     return Response(content=blob, media_type="application/octet-stream")
+
+
+@app.post("/project/{project_id}/session/fork")
+async def project_session_fork(project_id: str, req: SessionForkRequest) -> dict[str, Any]:
+    """Fork a chat session (kc_session_fork / SPEC §8.4). Writes a new
+    session manifest under `<project>/.kiclaude/sessions/` recording
+    `forked_from` the parent, in the shape the agent's M1-P-07 session
+    layer reads. Returns the new session id."""
+    opened = REGISTRY.get(project_id)
+    if opened is None:
+        raise HTTPException(status_code=404, detail=f"unknown project_id: {project_id}")
+    project_path = Path(opened.path)
+    sessions_dir = project_path / ".kiclaude" / "sessions"
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+    new_id = str(uuid.uuid4())
+    now = time.time()
+    manifest = {
+        "project_id": project_id,
+        "session_id": new_id,
+        "project_path": str(project_path),
+        "started_at_unix": now,
+        "last_seen_at_unix": now,
+        "schema_version": 1,
+        "forked_from": req.parent_session_id,
+        "label": req.label,
+    }
+    target = sessions_dir / f"{new_id}.json"
+    tmp = target.with_suffix(".tmp")
+    tmp.write_text(json.dumps(manifest, sort_keys=True, indent=2))
+    tmp.replace(target)
+    log.info(
+        "project_session_forked",
+        project_id=project_id,
+        parent=req.parent_session_id,
+        new_session_id=new_id,
+    )
+    return {"ok": True, "new_session_id": new_id, "forked_from": req.parent_session_id}
 
 
 @app.get("/project/{project_id}/dfm/check")

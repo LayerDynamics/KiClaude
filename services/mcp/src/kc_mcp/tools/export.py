@@ -96,6 +96,41 @@ async def kc_export_fab(args: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+@tool(
+    "kc_export_step",
+    "Export a 3D STEP model of the board via kicad-cli (FR-033). "
+    "Returns {ok, output_dir, step}. `board_only` exports the bare "
+    "board (no component models).",
+    {
+        "pcb_path": str,
+        "output_dir": str,
+        "board_only": bool,
+        "timeout_s": float,
+    },
+)
+async def kc_export_step(args: dict[str, Any]) -> dict[str, Any]:
+    pcb_path = args.get("pcb_path", "")
+    output_dir = args.get("output_dir", "")
+    if not pcb_path or not output_dir:
+        return error_envelope("`pcb_path` and `output_dir` are required")
+    body: dict[str, Any] = {"pcb_path": pcb_path, "output_dir": output_dir}
+    if args.get("board_only"):
+        body["board_only"] = True
+    timeout_s = args.get("timeout_s")
+    if isinstance(timeout_s, (int, float)) and timeout_s > 0:
+        body["timeout_s"] = float(timeout_s)
+    result = await _call("/tools/step", body)
+    shaped = _shape(result)
+    return envelope(
+        {
+            "ok": shaped.get("ok", False),
+            "pcb_path": pcb_path,
+            "output_dir": output_dir,
+            "step": shaped,
+        }
+    )
+
+
 async def _call(path: str, body: dict[str, Any]) -> dict[str, Any] | Exception:
     try:
         return await kiconnector_post(path, body)
