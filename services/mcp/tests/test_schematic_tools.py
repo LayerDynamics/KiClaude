@@ -15,6 +15,7 @@ from typing import Any
 import httpx
 import pytest
 from kc_mcp import clients
+from kc_mcp.distributors.aggregator import PartPricing
 from kc_mcp.server import _CLAUDE_TOOLS, build_server
 from kc_mcp.tools.erc import kc_erc
 from kc_mcp.tools.kcir import kc_kcir_get
@@ -30,6 +31,7 @@ from kc_mcp.tools.snapshot import (
     list_snapshots,
     record_snapshot,
 )
+from kc_mcp.tools.sourcing import set_aggregator_factory
 from kc_mcp.tools.symbol import kc_symbol_add, kc_symbol_edit
 from kc_mcp.tools.validate import kc_validate
 from kc_mcp.tools.wire import kc_wire_connect
@@ -432,12 +434,32 @@ async def test_kc_label_attach_hierarchical_creates_matching_sheet_pin(
     assert any(p["name"] == "DATA" for p in sheet["pins"])
 
 
+class _NoHitAggregator:
+    """Duck-typed aggregator that resolves nothing — keeps this test
+    hermetic now that kc_mpn_resolve hits the distributor aggregator."""
+
+    async def price(self, mpn: str, *, qty: int = 1, force_refresh: bool = False) -> PartPricing:
+        return PartPricing(
+            mpn=mpn, requested_qty=qty, quotes=[], errors={}, cheapest=None,
+            cheapest_unit_price_usd=None,
+        )
+
+    async def aclose(self) -> None:
+        return None
+
+
 async def test_kc_mpn_resolve_returns_structured_envelope() -> None:
-    result = await kc_mpn_resolve.handler({"mpn": "STM32G030F6P6", "manufacturer": "STMicro"})
+    set_aggregator_factory(lambda: _NoHitAggregator())  # type: ignore[arg-type,return-value]
+    try:
+        result = await kc_mpn_resolve.handler(
+            {"mpn": "STM32G030F6P6", "manufacturer": "STMicro"}
+        )
+    finally:
+        set_aggregator_factory(None)
     payload = _structured(result)
     assert payload["ok"] is True
-    # No distributor lookup in M1 — `found` is always False with a
-    # confidence score that scales with the supplied metadata.
+    # No distributor returned the part, so `found` stays False; confidence
+    # scales with the supplied metadata (manufacturer → >= 0.7).
     assert payload["found"] is False
     assert payload["confidence"] >= 0.7
 

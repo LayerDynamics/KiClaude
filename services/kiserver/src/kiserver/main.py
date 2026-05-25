@@ -453,6 +453,44 @@ async def share_file(token: str, path: str) -> Response:
     return Response(content=blob, media_type="application/octet-stream")
 
 
+@app.get("/project/{project_id}/library/search")
+async def project_library_search(
+    project_id: str, query: str, limit: int = 25
+) -> dict[str, Any]:
+    """Ranked symbol-library search for the opened project (FR-040/FR-041).
+
+    Builds (or loads from the SQLite cache) the `LibraryIndex` from the
+    project's `sym-lib-table` and returns scored hits. Each hit carries
+    `lib_id`, `footprint_filter`, `datasheet`, etc. — the raw material
+    for kc_mpn_resolve's symbol/footprint candidates. Returns an empty
+    hit list (not an error) when the project pins no symbol libraries."""
+    opened = REGISTRY.get(project_id)
+    if opened is None:
+        raise HTTPException(status_code=404, detail=f"unknown project_id: {project_id}")
+    query = (query or "").strip()
+    if not query:
+        return {"ok": True, "project_id": project_id, "query": query, "hits": []}
+    sym_lib_table = Path(opened.path) / "sym-lib-table"
+    if not sym_lib_table.is_file():
+        return {"ok": True, "project_id": project_id, "query": query, "hits": []}
+    from kiserver.library import LibraryIndex
+
+    cache_dir = Path(opened.path) / ".kiclaude" / "library-cache"
+    try:
+        index = LibraryIndex.open(sym_lib_table, cache_dir)
+        hits = index.search(query, limit=max(1, min(limit, 100)))
+    except (FileNotFoundError, OSError, ValueError) as e:
+        # A malformed/empty library table is not fatal — no candidates.
+        log.info("library_search_unavailable", project_id=project_id, error=str(e))
+        return {"ok": True, "project_id": project_id, "query": query, "hits": []}
+    return {
+        "ok": True,
+        "project_id": project_id,
+        "query": query,
+        "hits": [h.to_dict() for h in hits],
+    }
+
+
 @app.post("/project/{project_id}/session/fork")
 async def project_session_fork(project_id: str, req: SessionForkRequest) -> dict[str, Any]:
     """Fork a chat session (kc_session_fork / SPEC §8.4). Writes a new
