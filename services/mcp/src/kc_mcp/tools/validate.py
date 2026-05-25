@@ -361,10 +361,13 @@ def _min_pad_pitch(pads: list[dict[str, Any]]) -> float | None:
             pts.append((float(pos[0]), float(pos[1])))
     if len(pts) < 2:
         return None
+    pts.sort(key=lambda p: p[0])
     best: float | None = None
     for i in range(len(pts)):
         for j in range(i + 1, len(pts)):
-            dx = pts[i][0] - pts[j][0]
+            dx = pts[j][0] - pts[i][0]
+            if best is not None and dx >= best:
+                break
             dy = pts[i][1] - pts[j][1]
             d = (dx * dx + dy * dy) ** 0.5
             if d > 0.0 and (best is None or d < best):
