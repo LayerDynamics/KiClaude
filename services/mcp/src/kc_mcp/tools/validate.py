@@ -605,7 +605,9 @@ def _is_power_net(name: str) -> bool:
     return name.startswith("+") or any(tok in up for tok in _POWER_TOKENS)
 
 
-def _power_flag_nets(schematic: dict[str, Any]) -> set[str]:
+def _power_flag_nets(schematic: dict[str, Any] | None) -> set[str]:
+    if not schematic:
+        return set()
     """Net names that carry a power symbol / PWR_FLAG in the schematic —
     treated as having a declared source for KC021."""
     out: set[str] = set()
