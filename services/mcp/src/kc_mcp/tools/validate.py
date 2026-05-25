@@ -644,8 +644,11 @@ def _outer_microstrip_geometry(stackup: dict[str, Any]) -> tuple[float | None, f
         if seen_copper and kind in {"dielectric", "core", "prepreg"}:
             er = layer.get("dielectric_constant")
             h = layer.get("thickness_mm")
-            if er and h:
-                return float(er), float(h)
+            try:
+                if er is not None and h is not None:
+                    return float(er), float(h)
+            except (ValueError, TypeError):
+                return None, None
             return None, None
     return None, None
 
