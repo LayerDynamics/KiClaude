@@ -670,7 +670,8 @@ def _microstrip_z0(w_mm: float, h_mm: float, er: float, t_mm: float = 0.035) -> 
     """
     if w_mm <= 0 or h_mm <= 0 or er <= 0:
         return 0.0
-    return (87.0 / math.sqrt(er + 1.41)) * math.log((5.98 * h_mm) / (0.8 * w_mm + t_mm))
+    val = (87.0 / math.sqrt(er + 1.41)) * math.log((5.98 * h_mm) / (0.8 * w_mm + t_mm))
+    return max(0.0, val)
 
 
 def _analog_digital_ground_pairs(nets: list[dict[str, Any]]) -> list[tuple[str, str]]:
