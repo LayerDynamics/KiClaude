@@ -553,7 +553,7 @@ async def project_library_search(
 
 
 @app.post("/project/{project_id}/session/fork")
-async def project_session_fork(project_id: str, req: SessionForkRequest) -> dict[str, Any]:
+def project_session_fork(project_id: str, req: SessionForkRequest) -> dict[str, Any]:
     """Fork a chat session (kc_session_fork / SPEC §8.4). Writes a new
     session manifest under `<project>/.kiclaude/sessions/` recording
     `forked_from` the parent, in the shape the agent's M1-P-07 session
