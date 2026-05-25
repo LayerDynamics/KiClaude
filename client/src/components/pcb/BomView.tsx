@@ -22,7 +22,7 @@
  * a 1-of, 100-of, or 1k-of build in one click.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useProjectStore } from "../../stores/projectStore";
 
