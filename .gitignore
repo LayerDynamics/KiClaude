@@ -104,3 +104,7 @@ playwright-report/
 # M2-Q-04 NFR-003 benchmark output — per-run JSON, persisted as CI
 # artifacts via Playwright's reporter; not source-controlled.
 tests/perf/results/
+
+# Web-research scratch output (lore:web-research writes per-topic notes
+# here). Purged from history 2026-05-25; ignored so it can't re-enter.
+.web-research/
