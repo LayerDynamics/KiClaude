@@ -76,19 +76,24 @@ def _parse_price(raw: Any) -> float:
     decimal); `"1,234.56"` → `1234.56` (US thousands)."""
     if raw is None:
         return 0.0
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    # Strip currency symbols / whitespace, leaving digits + separators.
+    text = _PRICE_NUMERIC_RE.sub("", str(raw))
+    if not text:
+        return 0.0
+    has_dot = "." in text
+    has_comma = "," in text
     if has_dot and has_comma:
-        if text.find(".") > text.find(","):
+        # Both present → the separator that appears LAST is the decimal
+        # one. `1,234.56` (US: comma thousands) vs `1.234,56` (EU: dot
+        # thousands).
+        if text.rfind(".") > text.rfind(","):
             text = text.replace(",", "")
         else:
             text = text.replace(".", "").replace(",", ".")
     elif has_comma and not has_dot:
-        text = text.replace(",", ".")
-    has_comma = "," in text
-    if has_dot and has_comma:
-        # `1,234.56` US format — comma is thousands, dot is decimal.
-        text = text.replace(",", "")
-    elif has_comma and not has_dot:
-        # Pure-comma → treat as decimal separator (`1,42`).
+        # Pure-comma → treat as the decimal separator (`1,42` → `1.42`).
         text = text.replace(",", ".")
     try:
         return float(text)
