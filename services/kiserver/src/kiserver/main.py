@@ -13,10 +13,11 @@ Endpoints (M0-P-04):
 from __future__ import annotations
 
 import json
+import os
 import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from fastapi import FastAPI, HTTPException, Response
@@ -34,6 +35,9 @@ from kiserver.object_store import build_object_store
 from kiserver.project import REGISTRY
 from kiserver.sync import CloudSync
 from kiserver.telemetry import tracer
+
+if TYPE_CHECKING:
+    from kiserver.library import SearchHit
 
 log = structlog.get_logger(__name__)
 
@@ -462,36 +466,84 @@ async def share_file(token: str, path: str) -> Response:
     return Response(content=blob, media_type="application/octet-stream")
 
 
+def bundled_libs_dir() -> Path | None:
+    """Locate the pinned bundled library mirror (SPEC §9.5 / FR-040 / D6).
+
+    Honours `$KICLAUDE_BUNDLED_LIBS` first (set by the daemon/CI so the
+    `${KICLAUDE_BUNDLED_LIBS}` lib-table URIs resolve regardless of where
+    the repo lives); otherwise falls back to the in-repo `libs/` directory
+    two-plus levels above this file. Returns `None` when no mirror with a
+    `sym-lib-table` is present, so a deployment without the mirror simply
+    indexes the project's own libraries."""
+    env = os.environ.get("KICLAUDE_BUNDLED_LIBS")
+    candidates = (
+        [Path(env).expanduser()]
+        if env
+        else [Path(__file__).resolve().parents[4] / "libs"]
+    )
+    for cand in candidates:
+        if (cand / "sym-lib-table").is_file():
+            return cand
+    return None
+
+
+def _merge_hits(
+    primary: list[SearchHit], secondary: list[SearchHit], limit: int
+) -> list[SearchHit]:
+    """Merge two ranked hit lists, deduping by `lib_id` (the project's own
+    libraries win over the bundled mirror), then re-rank by score."""
+    seen = {h.lib_id for h in primary}
+    merged = list(primary) + [h for h in secondary if h.lib_id not in seen]
+    merged.sort(key=lambda h: (-h.score, h.lib_id))
+    return merged[:limit]
+
+
 @app.get("/project/{project_id}/library/search")
 async def project_library_search(
     project_id: str, query: str, limit: int = 25
 ) -> dict[str, Any]:
     """Ranked symbol-library search for the opened project (FR-040/FR-041).
 
-    Builds (or loads from the SQLite cache) the `LibraryIndex` from the
-    project's `sym-lib-table` and returns scored hits. Each hit carries
-    `lib_id`, `footprint_filter`, `datasheet`, etc. — the raw material
-    for kc_mpn_resolve's symbol/footprint candidates. Returns an empty
-    hit list (not an error) when the project pins no symbol libraries."""
+    Indexes (and SQLite-caches) the project's own `sym-lib-table` **and**
+    the pinned bundled mirror, then returns scored hits merged across both —
+    the project's libraries ranked first, the bundled mirror filling in the
+    standard KiCad parts. Each hit carries `lib_id`, `footprint_filter`,
+    `datasheet`, etc. — the raw material for kc_mpn_resolve's candidates.
+    Returns an empty hit list (not an error) when neither source resolves."""
     opened = REGISTRY.get(project_id)
     if opened is None:
         raise HTTPException(status_code=404, detail=f"unknown project_id: {project_id}")
     query = (query or "").strip()
     if not query:
         return {"ok": True, "project_id": project_id, "query": query, "hits": []}
-    sym_lib_table = Path(opened.path) / "sym-lib-table"
-    if not sym_lib_table.is_file():
-        return {"ok": True, "project_id": project_id, "query": query, "hits": []}
     from kiserver.library import LibraryIndex
 
     cache_dir = Path(opened.path) / ".kiclaude" / "library-cache"
-    try:
-        index = LibraryIndex.open(sym_lib_table, cache_dir)
-        hits = index.search(query, limit=max(1, min(limit, 100)))
-    except (FileNotFoundError, OSError, ValueError) as e:
-        # A malformed/empty library table is not fatal — no candidates.
-        log.info("library_search_unavailable", project_id=project_id, error=str(e))
-        return {"ok": True, "project_id": project_id, "query": query, "hits": []}
+    capped = max(1, min(limit, 100))
+    hits: list[SearchHit] = []
+
+    # 1. The project's own pinned libraries (if it declares any).
+    sym_lib_table = Path(opened.path) / "sym-lib-table"
+    if sym_lib_table.is_file():
+        try:
+            hits = LibraryIndex.open(sym_lib_table, cache_dir).search(query, limit=capped)
+        except (FileNotFoundError, OSError, ValueError) as e:
+            # A malformed/empty project table is not fatal — fall through to the mirror.
+            log.info("library_search_unavailable", project_id=project_id, error=str(e))
+
+    # 2. The bundled mirror (FR-040: scanned alongside the project's libraries).
+    bundled = bundled_libs_dir()
+    if bundled is not None:
+        try:
+            b_index = LibraryIndex.open(
+                bundled / "sym-lib-table",
+                cache_dir / "bundled",
+                overrides={"KICLAUDE_BUNDLED_LIBS": str(bundled)},
+            )
+            hits = _merge_hits(hits, b_index.search(query, limit=capped), capped)
+        except (FileNotFoundError, OSError, ValueError) as e:
+            log.info("bundled_library_unavailable", error=str(e))
+
     return {
         "ok": True,
         "project_id": project_id,

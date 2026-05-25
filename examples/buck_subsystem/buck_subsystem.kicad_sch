@@ -8,9 +8,9 @@
     (company "")
   )
   (lib_symbols
-    (symbol "Regulator_Switching:TPS562201"
+    (symbol "Regulator_Switching:TPS562202"
       (property "Reference" "U" (at 0 0 0))
-      (property "Value" "TPS562201" (at 0 0 0))
+      (property "Value" "TPS562202" (at 0 0 0))
     )
     (symbol "Device:C"
       (property "Reference" "C" (at 0 0 0))
@@ -21,12 +21,12 @@
       (property "Value" "L" (at 0 0 0))
     )
   )
-  (symbol (lib_id "Regulator_Switching:TPS562201") (at 100.0 70.0 0) (unit 1) (in_bom yes) (on_board yes)
+  (symbol (lib_id "Regulator_Switching:TPS562202") (at 100.0 70.0 0) (unit 1) (in_bom yes) (on_board yes)
     (uuid "63000000-2222-2222-2222-222222222201")
     (property "Reference" "U1" (at 102 69 0))
-    (property "Value" "TPS562201" (at 102 73 0))
+    (property "Value" "TPS562202" (at 102 73 0))
     (property "Footprint" "Package_TO_SOT_SMD:SOT-23-6" (at 0 0 0))
-    (property "Datasheet" "https://www.ti.com/lit/ds/symlink/tps562201.pdf" (at 0 0 0))
+    (property "Datasheet" "https://www.ti.com/lit/ds/symlink/tps562202.pdf" (at 0 0 0))
   )
   (symbol (lib_id "Device:C") (at 80.0 70.0 0) (unit 1) (in_bom yes) (on_board yes)
     (uuid "63000000-2222-2222-2222-222222222202")

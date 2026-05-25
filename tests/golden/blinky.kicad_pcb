@@ -18,7 +18,7 @@
   (net 0 "")
   (net 1 "GND")
 
-  (footprint "MCU_Espressif:ESP32-S3-WROOM-1"
+  (footprint "RF_Module:ESP32-S3-WROOM-1"
     (layer "F.Cu")
     (uuid "5c7e0a3e-4f9b-4ddc-9b3d-0001000000a1")
     (at 50.0 50.0 0.0)

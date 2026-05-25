@@ -1,7 +1,9 @@
 """Route test for the kc_mpn_resolve library-candidate backing
 (`GET /project/{id}/library/search`). The example pins no symbol
-libraries, so it returns an empty (but valid) hit list — the route
-must degrade gracefully rather than error.
+libraries of its own, so — with the bundled mirror isolated — it
+returns an empty (but valid) hit list: the route must degrade
+gracefully rather than error. Bundled-mirror merge behaviour is
+covered separately in `test_bundled_libs.py`.
 """
 
 from __future__ import annotations
@@ -22,7 +24,12 @@ def client() -> Iterator[TestClient]:
         yield c
 
 
-def test_library_search_empty_table_returns_no_hits(client: TestClient) -> None:
+def test_library_search_empty_table_returns_no_hits(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Point the bundled-mirror lookup at a dir with no sym-lib-table so this
+    # test isolates the project-only path (esp32_c6_rf pins no libraries).
+    monkeypatch.setenv("KICLAUDE_BUNDLED_LIBS", str(tmp_path))
     example = _REPO_ROOT / "examples" / "esp32_c6_rf"
     opened = client.post("/project/open", json={"path": str(example)})
     assert opened.status_code == 200, opened.text
@@ -33,7 +40,7 @@ def test_library_search_empty_table_returns_no_hits(client: TestClient) -> None:
     body = resp.json()
     assert body["ok"] is True
     assert body["query"] == "STM32"
-    assert body["hits"] == []  # esp32_c6_rf's sym-lib-table is empty
+    assert body["hits"] == []  # esp32_c6_rf pins no libs; mirror isolated
 
 
 def test_library_search_blank_query_returns_no_hits(client: TestClient) -> None:
