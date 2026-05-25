@@ -23,7 +23,7 @@ pub use lengthgroup::LengthGroup;
 pub use nets::{LayerRef, Net, NetClass, NetClassRef, NetRef, PadRef, Topology};
 pub use pcb::{
     check_invariants as check_pcb_invariants, Drawing, FootprintCourtyard, FootprintInstance,
-    Layer, Model3D, Outline, Pad, Pcb, PcbInvariantError, Track, Via, Zone,
+    Layer, Model3D, Outline, Pad, Pcb, PcbInvariantError, Signoff, Track, Via, Zone,
 };
 pub use project::{LibraryEntry, LibraryTable, Project, ProjectMetadata};
 pub use schematic::{

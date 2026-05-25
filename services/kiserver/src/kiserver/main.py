@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import structlog
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from kc_mcp.tools.snapshot import (
     get_snapshot_meta,
     get_snapshot_project,
@@ -27,7 +27,9 @@ from kc_mcp.ui_tools import UI_TOOLS
 from pydantic import BaseModel, Field
 
 from kiserver import __version__
+from kiserver.object_store import build_object_store
 from kiserver.project import REGISTRY
+from kiserver.sync import CloudSync
 from kiserver.telemetry import tracer
 
 log = structlog.get_logger(__name__)
@@ -97,6 +99,15 @@ class UiInvokeRequest(BaseModel):
     in [`kc_mcp.ui_tools`][kc_mcp.ui_tools]."""
 
     args: dict[str, Any] = Field(default_factory=dict)
+
+
+class SyncPullRequest(BaseModel):
+    """Body for `POST /sync/pull` (FR-007). Restores a synced project
+    version (named by its content-addressed `manifest_key`) into
+    `dest_dir`, which must already exist."""
+
+    manifest_key: str = Field(..., min_length=1, max_length=128)
+    dest_dir: str = Field(..., min_length=1, max_length=4_096)
 
 
 @app.get("/health")
@@ -286,6 +297,149 @@ async def project_snapshots(project_id: str) -> dict[str, Any]:
         "project_id": project_id,
         "snapshots": list_snapshots(project_id),
     }
+
+
+@app.post("/project/{project_id}/sync/push")
+async def project_sync_push(project_id: str) -> dict[str, Any]:
+    """Push the opened project's KiCad files to the content-addressed
+    object store (FR-007 cloud sync). Returns the manifest key (the
+    version id the caller records) and the per-file content keys. The
+    store backend is env-selected (local FS by default, S3 when
+    `KICLAUDE_OBJECT_STORE=s3`), so sync stays local-first (FP#8)."""
+    opened = REGISTRY.get(project_id)
+    if opened is None:
+        raise HTTPException(status_code=404, detail=f"unknown project_id: {project_id}")
+    sync = CloudSync(build_object_store())
+    with tracer.start_as_current_span("kiserver.project.sync_push") as span:
+        span.set_attribute("project_id", project_id)
+        try:
+            manifest_key, manifest = sync.push_dir(
+                project_id=project_id,
+                project_name=str(opened.summary.get("name", "")),
+                project_dir=Path(opened.path),
+            )
+        except (NotADirectoryError, OSError) as e:
+            span.record_exception(e)
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        span.set_attribute("manifest_key", manifest_key)
+        span.set_attribute("files_synced", len(manifest.files))
+    log.info(
+        "project_sync_pushed",
+        project_id=project_id,
+        manifest_key=manifest_key,
+        files=len(manifest.files),
+    )
+    return {
+        "ok": True,
+        "project_id": project_id,
+        "manifest_key": manifest_key,
+        "project_name": manifest.project_name,
+        "created_at": manifest.created_at,
+        "files": manifest.files,
+    }
+
+
+@app.post("/sync/pull")
+async def sync_pull(req: SyncPullRequest) -> dict[str, Any]:
+    """Restore a synced project version into `dest_dir` (FR-007). The
+    version is named by its content-addressed `manifest_key` from a
+    prior push."""
+    dest = Path(req.dest_dir).expanduser().resolve()
+    if not dest.exists():
+        raise HTTPException(status_code=404, detail=f"dest_dir not found: {req.dest_dir}")
+    if not dest.is_dir():
+        raise HTTPException(status_code=400, detail=f"dest_dir is not a directory: {req.dest_dir}")
+    sync = CloudSync(build_object_store())
+    try:
+        written = sync.pull_dir(manifest_key=req.manifest_key, dest_dir=dest)
+    except KeyError as e:
+        raise HTTPException(
+            status_code=404, detail=f"unknown manifest_key: {req.manifest_key}"
+        ) from e
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    log.info("project_sync_pulled", manifest_key=req.manifest_key, files=len(written))
+    return {
+        "ok": True,
+        "manifest_key": req.manifest_key,
+        "dest_dir": str(dest),
+        "written": written,
+    }
+
+
+# --- FR-080 read-only share links -----------------------------------------
+# A share is a content-addressed snapshot: the share token IS the
+# manifest's content key (immutable + tamper-evident, the property a
+# read-only link wants). Resolving a token never mutates anything, so no
+# permission gate is needed — the data is whatever was frozen at create.
+
+
+@app.post("/project/{project_id}/share")
+async def project_share_create(project_id: str) -> dict[str, Any]:
+    """Freeze the opened project into a content-addressed snapshot and
+    return a read-only share token (FR-080). The token is the snapshot's
+    manifest key; anyone with it can fetch the frozen files read-only."""
+    opened = REGISTRY.get(project_id)
+    if opened is None:
+        raise HTTPException(status_code=404, detail=f"unknown project_id: {project_id}")
+    sync = CloudSync(build_object_store())
+    try:
+        token, manifest = sync.push_dir(
+            project_id=project_id,
+            project_name=str(opened.summary.get("name", "")),
+            project_dir=Path(opened.path),
+        )
+    except (NotADirectoryError, OSError) as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    log.info("project_shared", project_id=project_id, token=token)
+    return {
+        "ok": True,
+        "token": token,
+        "url": f"/share/{token}",
+        "project_name": manifest.project_name,
+        "created_at": manifest.created_at,
+        "files": sorted(manifest.files),
+    }
+
+
+@app.get("/share/{token}")
+async def share_resolve(token: str) -> dict[str, Any]:
+    """Resolve a share token to its read-only manifest metadata
+    (FR-080). The file bytes are fetched separately via
+    `GET /share/{token}/file`."""
+    sync = CloudSync(build_object_store())
+    manifest = sync.load_manifest(token)
+    if manifest is None:
+        raise HTTPException(status_code=404, detail=f"unknown share token: {token}")
+    return {
+        "ok": True,
+        "read_only": True,
+        "token": token,
+        "project_name": manifest.project_name,
+        "created_at": manifest.created_at,
+        "files": sorted(manifest.files),
+    }
+
+
+@app.get("/share/{token}/file")
+async def share_file(token: str, path: str) -> Response:
+    """Return one file's bytes from a shared snapshot (FR-080,
+    read-only). `path` is a project-relative path from the manifest."""
+    sync = CloudSync(build_object_store())
+    manifest = sync.load_manifest(token)
+    if manifest is None:
+        raise HTTPException(status_code=404, detail=f"unknown share token: {token}")
+    content_key = manifest.files.get(path)
+    if content_key is None:
+        raise HTTPException(
+            status_code=404, detail=f"{path!r} is not part of share {token}"
+        )
+    blob = sync.store.get(content_key)
+    if blob is None:
+        raise HTTPException(
+            status_code=409, detail=f"blob for {path!r} missing from object store"
+        )
+    return Response(content=blob, media_type="application/octet-stream")
 
 
 @app.get("/project/{project_id}/dfm/check")

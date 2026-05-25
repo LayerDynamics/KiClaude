@@ -7,6 +7,7 @@ import type { LengthGroup } from "./LengthGroup";
 import type { Net } from "./Net";
 import type { NetClass } from "./NetClass";
 import type { Outline } from "./Outline";
+import type { Signoff } from "./Signoff";
 import type { Track } from "./Track";
 import type { Via } from "./Via";
 import type { Zone } from "./Zone";
@@ -53,4 +54,12 @@ diff_pairs: Array<DiffPair>,
  * M3-R-07 — declared length-match groups. Drives the
  * length-match analyzer + tuning queue (M3-R-05).
  */
-length_groups: Array<LengthGroup>, };
+length_groups: Array<LengthGroup>, 
+/**
+ * M5 / KC060 + KC070 design sign-off gates. Each flag is a
+ * deliberate human review gate; the high-speed validators emit
+ * warnings until the matching flag is set. **The LLM cannot flip
+ * these** — a `PreToolUse` hook in `services/agent` rejects any
+ * Claude-originated mutation that targets `pcb.signoff.*`.
+ */
+signoff: Signoff, };

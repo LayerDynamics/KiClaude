@@ -36,6 +36,7 @@ export type { ProjectMetadata } from "./ProjectMetadata";
 export type { Schematic } from "./Schematic";
 export type { Sheet } from "./Sheet";
 export type { SheetPin } from "./SheetPin";
+export type { Signoff } from "./Signoff";
 export type { Stackup } from "./Stackup";
 export type { StackupLayer } from "./StackupLayer";
 export type { StackupLayerKind } from "./StackupLayerKind";

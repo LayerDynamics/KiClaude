@@ -54,6 +54,40 @@ pub struct Pcb {
     /// length-match analyzer + tuning queue (M3-R-05).
     #[serde(default)]
     pub length_groups: Vec<LengthGroup>,
+    /// M5 / KC060 + KC070 design sign-off gates. Each flag is a
+    /// deliberate human review gate; the high-speed validators emit
+    /// warnings until the matching flag is set. **The LLM cannot flip
+    /// these** — a `PreToolUse` hook in `services/agent` rejects any
+    /// Claude-originated mutation that targets `pcb.signoff.*`.
+    #[serde(default)]
+    pub signoff: Signoff,
+}
+
+/// Per-board human review sign-off flags (SPEC §11 M5).
+///
+/// These gate the advanced-workflow validators:
+/// - `ddr_reviewed` clears [KC060](crate) (DDR fly-by topology).
+/// - `bga_fanout_reviewed` clears [KC070](crate) (BGA fanout DFM).
+/// - `rf_reviewed` clears RF/CPWG review (M5 co-pilot).
+///
+/// Default is "nothing reviewed" — every flag starts `false`, so a
+/// freshly-opened board surfaces the M5 validators as warnings until a
+/// human ticks the box in the UI. Claude is forbidden from setting them
+/// (enforced by the agent's permission gate), keeping sign-off a human
+/// act.
+#[cfg_attr(feature = "ts-export", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-export", ts(export))]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Signoff {
+    /// RF / antenna / CPWG feed reviewed by a human EE.
+    #[serde(default)]
+    pub rf_reviewed: bool,
+    /// DDR fly-by topology reviewed and accepted (clears KC060).
+    #[serde(default)]
+    pub ddr_reviewed: bool,
+    /// BGA fanout feasibility reviewed and accepted (clears KC070).
+    #[serde(default)]
+    pub bga_fanout_reviewed: bool,
 }
 
 /// A board layer — copper, dielectric, soldermask, silkscreen, etc.

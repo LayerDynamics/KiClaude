@@ -12,6 +12,7 @@ from agent.hooks.permission import (
     classify_tool,
     is_mutating,
     permission_hook,
+    targets_signoff,
 )
 
 
@@ -290,3 +291,64 @@ async def test_permission_hook_swallows_recorder_exceptions() -> None:
     assert spec["permissionDecision"] == "allow"
     # No reason field — the recorder failed silently.
     assert "permissionDecisionReason" not in spec
+
+
+# --- M5 signoff hard gate (FR-081-adjacent / SPEC §11 M5) -----------------
+
+
+def test_targets_signoff_detects_flag_keys_and_nesting() -> None:
+    assert targets_signoff({"signoff": {"ddr_reviewed": True}}) is True
+    assert targets_signoff({"ddr_reviewed": True}) is True
+    assert targets_signoff({"pcb": {"signoff": {"rf_reviewed": True}}}) is True
+    assert targets_signoff({"patch": [{"bga_fanout_reviewed": True}]}) is True
+    # Normal declarative tool inputs never trip the guard.
+    assert targets_signoff({"project_id": "p1", "refdes": "U1"}) is False
+    assert targets_signoff({"net": "GND", "layer": "In1.Cu"}) is False
+    assert targets_signoff("not a dict") is False
+
+
+async def test_permission_hook_denies_signoff_even_in_trusted_mode() -> None:
+    """The LLM can never flip pcb.signoff — the hard gate overrides
+    trusted mode (which otherwise auto-approves every kc_* call)."""
+    out = await permission_hook(
+        {
+            "tool_name": "kc_project_save",
+            "tool_input": {"project_id": "p1", "signoff": {"ddr_reviewed": True}},
+            "session_id": "s1",
+        },
+        None,
+        None,
+        settings_loader=lambda: PermissionSettings(trusted_mode=True),
+    )
+    hook_out = out["hookSpecificOutput"]
+    assert hook_out["permissionDecision"] == "deny"
+    assert "sign-off" in hook_out["permissionDecisionReason"]
+
+
+async def test_permission_hook_denies_nested_signoff_in_any_tool() -> None:
+    out = await permission_hook(
+        {
+            "tool_name": "mcp__kiclaude__kc_kcir_get",
+            "tool_input": {
+                "project_id": "p1",
+                "patch": {"pcb": {"signoff": {"rf_reviewed": True}}},
+            },
+            "session_id": "s1",
+        },
+        None,
+        None,
+        settings_loader=lambda: PermissionSettings(trusted_mode=True),
+    )
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+async def test_permission_hook_allows_normal_call_without_signoff() -> None:
+    """Regression: the signoff guard must not over-trigger on ordinary
+    read-only calls."""
+    out = await permission_hook(
+        {"tool_name": "kc_kcir_get", "tool_input": {"project_id": "p1"}, "session_id": "s1"},
+        None,
+        None,
+        settings_loader=lambda: PermissionSettings(),
+    )
+    assert out["hookSpecificOutput"]["permissionDecision"] == "allow"

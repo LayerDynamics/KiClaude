@@ -503,3 +503,70 @@ fn save_pcb_omits_stackup_block_for_default_project() {
         "default emit must not include a stackup block\n{text}"
     );
 }
+
+/// M5 reference project (SPEC §A.5 `esp32_c6_rf`): the on-disk example
+/// opens through the full `.kicad_pro` + `.kicad_pcb` + `.kicad_sch`
+/// path and carries the structure the M5 co-pilot validators read — a
+/// 4-layer stack, a DDR3L BGA with a real ball grid (KC070), a GND
+/// reference plane, an RF feed track, and the M5 `signoff` gate
+/// defaulting to "nothing reviewed" (KC060/KC070 warn until ticked).
+#[test]
+fn integration_open_esp32_c6_rf_reference_project() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/esp32_c6_rf");
+    let opened = KiProject::open(&dir).expect("esp32_c6_rf opens");
+    let pcb = &opened.project.pcb;
+
+    assert_eq!(opened.project.name, "esp32_c6_rf");
+
+    // 4-layer stack: F.Cu, In1.Cu, In2.Cu, B.Cu (+ Edge.Cuts).
+    let copper: Vec<&str> = pcb
+        .layers
+        .iter()
+        .filter(|l| l.kind == "signal" || l.kind == "power")
+        .map(|l| l.name.as_str())
+        .collect();
+    assert_eq!(
+        copper,
+        vec!["F.Cu", "In1.Cu", "In2.Cu", "B.Cu"],
+        "4 copper layers in stack order"
+    );
+
+    // Footprints: U1 module, U2 DDR3L BGA, J1 RF connector, C1..C4.
+    assert_eq!(pcb.footprints.len(), 7, "U1, U2, J1, C1..C4");
+    let bga = pcb
+        .footprints
+        .iter()
+        .find(|f| f.refdes == "U2")
+        .expect("U2 BGA present");
+    assert!(
+        bga.lib_id.contains("BGA"),
+        "U2 lib_id names a BGA package: {}",
+        bga.lib_id
+    );
+    assert_eq!(
+        bga.pads.len(),
+        16,
+        "DDR3L BGA exposes a 4x4 ball grid (KC070)"
+    );
+
+    // GND reference plane on the inner layer (KC050/return-path/RF).
+    let gnd_zone = pcb
+        .zones
+        .iter()
+        .find(|z| z.net == "GND")
+        .expect("GND zone present");
+    assert_eq!(gnd_zone.layer.0, "In1.Cu", "GND plane on the inner layer");
+
+    // RF feed routed as two CPWG segments (RF_FEED + RF_ANT nets).
+    assert_eq!(pcb.tracks.len(), 2, "RF feed line (two segments)");
+    assert!(
+        pcb.nets.iter().any(|n| n.name == "RF_ANT")
+            && pcb.nets.iter().any(|n| n.name.starts_with("DDR_")),
+        "RF + DDR nets present"
+    );
+
+    // M5 signoff gate defaults to "nothing reviewed" so KC060/KC070 warn.
+    assert!(!pcb.signoff.rf_reviewed);
+    assert!(!pcb.signoff.ddr_reviewed);
+    assert!(!pcb.signoff.bga_fanout_reviewed);
+}

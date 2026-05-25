@@ -22,11 +22,11 @@
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "three": "^0.169.0",
+    "yjs": "^13.6.30",
     "zustand": "^5.0.0"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",
-    "@types/three": "^0.169.0",
     "@eslint/js": "^10.0.1",
     "@rolldown/plugin-babel": "^0.2.3",
     "@tailwindcss/vite": "^4.3.0",
@@ -37,6 +37,7 @@
     "@types/node": "^24.12.3",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@types/three": "^0.169.0",
     "@vitejs/plugin-react": "^6.0.1",
     "autoprefixer": "^10.5.0",
     "babel-plugin-react-compiler": "^1.0.0",
