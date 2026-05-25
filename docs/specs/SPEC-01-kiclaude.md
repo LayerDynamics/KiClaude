@@ -917,7 +917,7 @@ These were "open" during drafting; the spec now commits to them so M0 can start 
 | P1 | **Pricing model (post-v1):** free self-hosted + paid SaaS, or full open source with services revenue, or paid product? | layerdynamics@proton.me | M4 kickoff (≈ week 30) |
 | P2 | **Telemetry endpoint:** kiclaude-hosted (defaults to layerdynamics-controlled OTel collector), or user-supplied only? Affects whether opt-in telemetry has a default destination. | layerdynamics@proton.me | M2 kickoff (≈ week 12) |
 | P3 | **Distributor API keys for the SaaS:** ship a shared key (rate-limit per user) or require BYO key? Affects free-tier UX. | layerdynamics@proton.me | M3 kickoff (≈ week 22) |
-| P4 | **CRDT vendor (if M5 multiplayer):** Yjs vs Automerge vs custom? | layerdynamics@proton.me | M5 kickoff (≈ week 42) — only if multiplayer stays in scope |
+| ~~P4~~ | **CRDT vendor (if M5 multiplayer):** Yjs vs Automerge vs custom? — **RESOLVED 2026-05-25 → Yjs** (JSON-level convergence; off by default). See [ADR-0001](../ADR/0001-crdt-yjs.md). | layerdynamics@proton.me | ~~M5 kickoff~~ — decided early during the FR-081 spike |
 
 ---
 
