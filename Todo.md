@@ -308,3 +308,24 @@ The original M0–M3 gaps §1–§5 above remain open.
    markdown over existing tools; then `/add-led`, `/add-usb-c`.
 5. **§7 zone-fill decision**, **§6 STEP (M4)**, **§8–10 housekeeping** — as
    bandwidth allows.
+
+---
+
+## Sequential execution backlog (2026-05-25)
+
+Worked top-to-bottom; each lands as its own commit with tests. Honesty
+note: **T10 and T11 are deliberately NOT "completed"** — they are
+multi-week / explicitly-deferred efforts that cannot be done without
+faking, so they're recorded with their blockers, not stubbed.
+
+- [x] **T1 — `SPEC.md` root redirect** (Todo §10). `SPEC.md` → `docs/specs/SPEC-01-kiclaude.md` (symlink, git mode 120000). ✅
+- [ ] **T2 — Resolve SPEC §16.2 P4 status** (Todo §11). Mark P4 (CRDT vendor) decided → Yjs, referencing `docs/ADR/0001-crdt-yjs.md`.
+- [ ] **T3 — `docs/architecture/` + `docs/observability/`** (Todo §9). ADR index / architecture overview + an OTel/Grafana dashboard preset (SPEC §8.8).
+- [ ] **T4 — 5 slash commands** (Todo §5). `/board-diff`, `/snapshot`, `/revert` (wrappers over existing `kc_diff`/`kc_snapshot_*`), then `/add-led`, `/add-usb-c`.
+- [ ] **T5 — Design-intent validators** (Todo §2). KC020 (decoupling), KC021 (power-rail source), KC030 (length-match ≥2), KC031 (diff-pair bidirectional), KC040 (impedance achievable), KC050 (partition isolation) in `validate.py`, with unit tests; reconcile the KC001–011 numbering note vs SPEC §7.3.
+- [ ] **T6 — 8 Claude-facing MCP tools** (Todo §1). `kc_diffpair_declare`, `kc_length_match_set`, `kc_impedance_check`, `kc_decoupling_check`, `kc_partition_check`, `kc_bom_get`, `kc_export_step`, `kc_session_fork` — registered in `_CLAUDE_TOOLS`, each with a Pydantic model + integration test; depends on T5.
+- [ ] **T7 — `kc_mpn_resolve` (full)** (Todo §4). Wire to the distributor aggregator (stock) + library indexers (symbol/footprint candidates); depends on T9 for candidates.
+- [ ] **T8 — FR-043 drop-to-import** (Todo §8). Drag-drop a `.kicad_sym`/`.kicad_mod` onto the editor → import endpoint + client handler.
+- [ ] **T9 — Bundled `libs/` mirror** (Todo §3). `libs/` with a pinned manifest + a curated real symbol/footprint subset + a populate/pin script + indexer wiring (D6: fall through to KiCad GitLab on-demand). Infra + a real seeded subset, not the full multi-GB mirror.
+- [ ] **T10 — STEP geometry parsing** (Todo §6) — **BLOCKED, not completing.** Real `.step` mesh parsing needs `occt-import-js` (~20 MB wasm); SPEC §11 defers it to M4. The placement scene (`three_scene.rs`) + marker-box viewer already exist. Recorded, not stubbed.
+- [ ] **T11 — Zone-fill `simple` XOR ≤ 0.01** (Todo §7) — **BLOCKED, not completing.** `docs/plans/2026-05-24-m2-r-05d-edge-aligned-offset.md` empirically ruled this out across 6 attempts; needs a multi-week from-scratch KiCad `ClipperOffset` port. Gate held at the documented 0.015 floor. Decision item, not an implementable task.
