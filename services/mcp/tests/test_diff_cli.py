@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 from pathlib import Path
 
 import pytest
 from kc_mcp.diff_cli import (
-    PcbSummary,
     diff_pcbs,
     main,
     parse_pcb,
@@ -112,7 +110,9 @@ def test_diff_pcbs_empty_on_identical_input() -> None:
         assert section["modified"] == []
 
 
-def test_main_outputs_json_and_exit_codes(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_main_outputs_json_and_exit_codes(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     a = tmp_path / "a.kicad_pcb"
     b = tmp_path / "b.kicad_pcb"
     a.write_text(PCB_A)
@@ -125,7 +125,9 @@ def test_main_outputs_json_and_exit_codes(tmp_path: Path, capsys: pytest.Capture
     assert any(t["uuid"] == "t-2" for t in payload["delta"]["tracks"]["added"])
 
 
-def test_main_pr_mode_returns_zero_when_identical(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_main_pr_mode_returns_zero_when_identical(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     a = tmp_path / "a.kicad_pcb"
     a.write_text(PCB_A)
     rc = main([str(a), str(a), "--pr", "--no-color"])
@@ -135,7 +137,9 @@ def test_main_pr_mode_returns_zero_when_identical(tmp_path: Path, capsys: pytest
 
 
 def test_main_rejects_missing_path(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    rc = main([str(tmp_path / "does-not-exist.kicad_pcb"), str(tmp_path / "also-missing.kicad_pcb")])
+    rc = main(
+        [str(tmp_path / "does-not-exist.kicad_pcb"), str(tmp_path / "also-missing.kicad_pcb")]
+    )
     assert rc == 2
     err = capsys.readouterr().err
     assert "not found" in err

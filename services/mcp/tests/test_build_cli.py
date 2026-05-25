@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
 
 import pytest
 from kc_mcp.build_cli import StageResult, _build_argparser, _human_report, run_build
@@ -79,7 +78,16 @@ async def test_run_build_fails_when_target_missing(tmp_path: Path) -> None:
 def test_argparser_includes_all_flags() -> None:
     parser = _build_argparser()
     ns = parser.parse_args(
-        ["/tmp/blinky", "--out", "/tmp/out", "--json", "--no-color", "--skip-erc", "--skip-drc", "--skip-export"]
+        [
+            "/tmp/blinky",
+            "--out",
+            "/tmp/out",
+            "--json",
+            "--no-color",
+            "--skip-erc",
+            "--skip-drc",
+            "--skip-export",
+        ]
     )
     assert ns.project == "/tmp/blinky"
     assert ns.output_dir == "/tmp/out"

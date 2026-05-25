@@ -28,7 +28,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-
 # ---------------------------------------------------------------------
 # Minimal S-expression parser. Enough to walk the canonical
 # `.kicad_pcb` produced by `kiclaude_ki::format::v9::emit_pcb` (and

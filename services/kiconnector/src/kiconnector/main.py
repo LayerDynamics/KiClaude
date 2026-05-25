@@ -47,9 +47,9 @@ from kiconnector.erc import DEFAULT_TIMEOUT_S, run_erc
 from kiconnector.export import (
     DEFAULT_GERBER_LAYERS,
     export_drill,
-    export_step,
     export_gerbers,
     export_pos,
+    export_step,
 )
 from kiconnector.export import (
     DEFAULT_TIMEOUT_S as EXPORT_TIMEOUT_S,
