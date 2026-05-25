@@ -106,6 +106,13 @@ class CloudSync:
         dest_dir = Path(dest_dir)
         dest_dir.mkdir(parents=True, exist_ok=True)
 
+        # Pre-check that all blobs exist to prevent partial/corrupted restores
+        for rel, content_key in manifest.files.items():
+            if not self.store.exists(content_key):
+                raise FileNotFoundError(
+                    f"blob {content_key} for {rel} missing from object store"
+                )
+
         written: list[str] = []
         for rel, content_key in sorted(manifest.files.items()):
             blob = self.store.get(content_key)
