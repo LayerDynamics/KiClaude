@@ -1,0 +1,16 @@
+(kicad_sch (version 20240108) (generator "kiclaude") (generator_version "0.1")
+  (uuid "e5c60001-0000-4000-a000-000000000001")
+  (paper "A4")
+  (title_block
+    (title "esp32_c6_rf")
+    (date "")
+    (rev "0.1")
+    (company "")
+    (comment 1 "M5 co-pilot demo: ESP32-C6 RF antenna feed (CPWG) + DDR3L fly-by sketch + BGA fanout — all human-signoff gated (KC060/KC070)")
+  )
+  (lib_symbols
+  )
+  (sheet_instances
+    (path "/" (page "1"))
+  )
+)

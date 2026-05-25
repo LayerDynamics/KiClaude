@@ -16,7 +16,8 @@
   "dependencies": {
     "@hono/node-server": "^1.13.0",
     "@hono/node-ws": "^1.0.5",
-    "hono": "^4.6.0"
+    "hono": "^4.6.0",
+    "yjs": "^13.6.30"
   },
   "devDependencies": {
     "@types/node": "^22.7.0",

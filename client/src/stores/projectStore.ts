@@ -71,6 +71,17 @@ export interface KcirPcb {
   /** M3-R-07 — declared length-match groups (`pcb.length_groups`).
    * Driven by the M3-R-05 analyzer + M3-T-04 group manager. */
   length_groups?: KcirLengthGroup[];
+  /** M5 — per-board human review sign-off gates (`pcb.signoff`).
+   * Cleared in the UI; Claude is forbidden from setting them (agent
+   * `PreToolUse` gate). Drives KC060 (DDR) + KC070 (BGA) validators. */
+  signoff?: KcirSignoff;
+}
+
+/** M5 design sign-off gates — mirrors `crates/ki/src/kcir/pcb.rs::Signoff`. */
+export interface KcirSignoff {
+  rf_reviewed: boolean;
+  ddr_reviewed: boolean;
+  bga_fanout_reviewed: boolean;
 }
 
 export interface KcirStackupLayer {

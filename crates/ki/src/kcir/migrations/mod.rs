@@ -23,6 +23,7 @@ use serde_json::Value;
 pub mod v0_2;
 pub mod v0_3;
 pub mod v0_4;
+pub mod v0_5;
 
 /// All migrations in order. Each entry says "if the document's
 /// `kcir_version` is < `to_version`, run `apply`".
@@ -39,6 +40,10 @@ pub const MIGRATIONS: &[Migration] = &[
     Migration {
         to_version: "0.4.0",
         apply: v0_4::migrate,
+    },
+    Migration {
+        to_version: "0.5.0",
+        apply: v0_5::migrate,
     },
 ];
 

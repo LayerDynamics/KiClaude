@@ -1,6 +1,14 @@
-"""`kc_validate` — KC001..KC011 structural validators (M1-P-04).
+"""`kc_validate` — KCIR structural + M5 co-pilot validators.
 
-Runs KCIR-only sanity checks that don't require a running kicad-cli.
+Runs KCIR-only sanity checks that don't require a running kicad-cli:
+
+- KC001..KC011 — structural integrity (refdes, footprints, nets,
+  hierarchy) — M1-P-04.
+- KC060 — DDR fly-by topology reaches >= 3 nodes and is human signed
+  off (SPEC §7.3; warns until `pcb.signoff.ddr_reviewed`).
+- KC070 — BGA fanout is feasible on the declared fab DFM rules (SPEC
+  §7.3; warns until `pcb.signoff.bga_fanout_reviewed`).
+
 Real ERC (electrical-rule-check) lives in `tools/erc.py` and shells
 out to `kicad-cli sch erc`.
 """
@@ -18,9 +26,11 @@ from kc_mcp.clients import kiserver_get
 
 @tool(
     "kc_validate",
-    "Run KC001..KC011 KCIR-level sanity validators on an opened "
-    "project. Returns a list of findings with `code`, `severity`, "
-    "`message`, and optional `target_uuid`. Read-only.",
+    "Run the KCIR-level sanity validators on an opened project: "
+    "KC001..KC011 structural checks plus the M5 co-pilot validators "
+    "KC060 (DDR fly-by topology) and KC070 (BGA fanout feasibility). "
+    "Returns findings with `code`, `severity`, `message`, and optional "
+    "`target_uuid`. Read-only.",
     {"project_id": str},
 )
 async def kc_validate(args: dict[str, Any]) -> dict[str, Any]:
@@ -244,7 +254,144 @@ def _run_validators(project: dict[str, Any]) -> list[dict[str, Any]]:
                 }
             )
 
+    # ---- M5 co-pilot validators (SPEC §7.3) -------------------------
+    # These read the M5 `pcb.signoff` gate (KCIR 0.5). Each surfaces a
+    # warning until the human ticks the matching sign-off flag; the LLM
+    # cannot set those flags (agent PreToolUse gate).
+    signoff = pcb.get("signoff", {}) or {}
+
+    # KC060: a DDR fly-by net must reach >= 3 nodes (controller + >= 2
+    # loads) and be human-reviewed. Warning until `signoff.ddr_reviewed`.
+    ddr_reviewed = bool(signoff.get("ddr_reviewed", False))
+    for net in pcb.get("nets", []) or []:
+        if net.get("topology") != "fly_by":
+            continue
+        nodes = len(net.get("members", []) or [])
+        if nodes < 3:
+            findings.append(
+                {
+                    "code": "KC060",
+                    "severity": "error",
+                    "message": (
+                        f"Fly-by net '{net.get('name')}' has {nodes} node(s); a DDR "
+                        "fly-by topology needs >= 3 (controller + >= 2 loads)."
+                    ),
+                    "target_uuid": None,
+                }
+            )
+        elif not ddr_reviewed:
+            findings.append(
+                {
+                    "code": "KC060",
+                    "severity": "warning",
+                    "message": (
+                        f"DDR fly-by net '{net.get('name')}' ({nodes} nodes) has not "
+                        "been human-reviewed — set pcb.signoff.ddr_reviewed after a "
+                        "topology + termination review."
+                    ),
+                    "target_uuid": None,
+                }
+            )
+
+    # KC070: BGA fanout feasibility on the declared fab DFM rules. A
+    # single-layer dog-bone escape needs roughly
+    #   ball_pitch >= via_diameter + clearance + trace_width.
+    # Infeasible + unreviewed is an error (needs HDI/microvia or signoff);
+    # feasible + unreviewed is a warning; reviewed clears (info).
+    bga_reviewed = bool(signoff.get("bga_fanout_reviewed", False))
+    rules = project.get("design_rules", {}) or {}
+    via_dia = float(rules.get("via_diameter_mm", 0.0) or 0.0)
+    clearance = float(rules.get("clearance_mm", 0.0) or 0.0)
+    trace = float(rules.get("trace_width_mm", 0.0) or 0.0)
+    need_pitch = via_dia + clearance + trace
+    for fp in pcb.get("footprints", []) or []:
+        pads = fp.get("pads", []) or []
+        if not _is_bga_footprint(fp.get("lib_id", "") or "", pads):
+            continue
+        pitch = _min_pad_pitch(pads)
+        ref = fp.get("refdes") or fp.get("uuid")
+        if pitch is None:
+            continue
+        if need_pitch > 0.0 and pitch + 1e-9 < need_pitch:
+            findings.append(
+                {
+                    "code": "KC070",
+                    "severity": "info" if bga_reviewed else "error",
+                    "message": (
+                        f"BGA {ref} ball pitch {pitch:.3f} mm is below the "
+                        f"{need_pitch:.3f} mm a single-layer dog-bone escape needs "
+                        f"(via {via_dia:.3f} + clearance {clearance:.3f} + trace "
+                        f"{trace:.3f}); requires HDI/microvia fanout"
+                        + (
+                            " — accepted via pcb.signoff.bga_fanout_reviewed."
+                            if bga_reviewed
+                            else "."
+                        )
+                    ),
+                    "target_uuid": fp.get("uuid"),
+                }
+            )
+        elif not bga_reviewed:
+            findings.append(
+                {
+                    "code": "KC070",
+                    "severity": "warning",
+                    "message": (
+                        f"BGA {ref} fanout looks feasible at {pitch:.3f} mm pitch but "
+                        "has not been human-reviewed — set "
+                        "pcb.signoff.bga_fanout_reviewed after a fanout review."
+                    ),
+                    "target_uuid": fp.get("uuid"),
+                }
+            )
+
     return findings
+
+
+def _min_pad_pitch(pads: list[dict[str, Any]]) -> float | None:
+    """Minimum center-to-center distance between any two pads, mm.
+
+    For a regular ball grid this is the ball pitch. Returns `None` when
+    there are fewer than two positioned pads.
+    """
+    pts: list[tuple[float, float]] = []
+    for p in pads:
+        pos = p.get("position_mm")
+        if isinstance(pos, (list, tuple)) and len(pos) == 2:
+            pts.append((float(pos[0]), float(pos[1])))
+    if len(pts) < 2:
+        return None
+    best: float | None = None
+    for i in range(len(pts)):
+        for j in range(i + 1, len(pts)):
+            dx = pts[i][0] - pts[j][0]
+            dy = pts[i][1] - pts[j][1]
+            d = (dx * dx + dy * dy) ** 0.5
+            if d > 0.0 and (best is None or d < best):
+                best = d
+    return best
+
+
+def _is_bga_footprint(lib_id: str, pads: list[dict[str, Any]]) -> bool:
+    """Heuristic BGA detector.
+
+    A footprint is treated as a BGA when its `lib_id` names a BGA
+    package, or when it carries a dense, uniform pad array (>= 9 pads
+    spread over >= 3 distinct X and >= 3 distinct Y positions — i.e. a
+    grid, not a single row/column or a discrete part).
+    """
+    if "BGA" in lib_id.upper():
+        return True
+    if len(pads) < 9:
+        return False
+    xs: set[float] = set()
+    ys: set[float] = set()
+    for p in pads:
+        pos = p.get("position_mm")
+        if isinstance(pos, (list, tuple)) and len(pos) == 2:
+            xs.add(round(float(pos[0]), 3))
+            ys.add(round(float(pos[1]), 3))
+    return len(xs) >= 3 and len(ys) >= 3
 
 
 __all__ = ["kc_validate"]
