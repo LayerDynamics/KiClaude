@@ -99,6 +99,10 @@ export function BomView(props: BomViewProps) {
 
   const load = useCallback(
     async (force: boolean) => {
+      // Tag this load so a slow earlier request can't clobber a newer one
+      // (the qty picker can fire loads faster than the aggregator responds).
+      const requestId = (lastRequestId.current += 1);
+      const isCurrent = () => lastRequestId.current === requestId;
       setLoading(true);
       setError(null);
       try {
@@ -108,15 +112,16 @@ export function BomView(props: BomViewProps) {
         const url = `${apiBase}/project/${encodeURIComponent(projectId)}/bom/price?${params}`;
         const resp = await fetchImpl(url, { method: "GET" });
         const body = (await resp.json()) as BomResponse;
+        if (!isCurrent()) return;
         if (!resp.ok || body.ok === false) {
           throw new Error(body.error ?? body.detail ?? `${resp.status} ${resp.statusText}`);
         }
         setLines(body.bom_lines ?? []);
         setPricing(body.pricing ?? null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+        if (isCurrent()) setError(err instanceof Error ? err.message : String(err));
       } finally {
-        setLoading(false);
+        if (isCurrent()) setLoading(false);
       }
     },
     [apiBase, fetchImpl, projectId, qtyMultiplier],

@@ -121,6 +121,15 @@ class SessionForkRequest(BaseModel):
     label: str = Field(default="", max_length=200)
 
 
+class LibraryImportRequest(BaseModel):
+    """Body for `POST /project/{id}/library/import` (FR-043) — a
+    `.kicad_sym` / `.kicad_mod` dropped onto the editor."""
+
+    filename: str = Field(..., min_length=1, max_length=255)
+    content: str = Field(..., max_length=8_000_000)
+    kind: str = Field(..., pattern="^(symbol|footprint)$")
+
+
 @app.get("/health")
 async def health() -> dict[str, Any]:
     """Liveness probe. The `native` field tells the gateway whether
@@ -526,6 +535,75 @@ async def project_session_fork(project_id: str, req: SessionForkRequest) -> dict
         new_session_id=new_id,
     )
     return {"ok": True, "new_session_id": new_id, "forked_from": req.parent_session_id}
+
+
+def _safe_basename(filename: str) -> str:
+    """Strip any path components — imports must land inside the project,
+    never escape it via `../`."""
+    return Path(filename).name
+
+
+def _append_lib_table_row(table_path: Path, head: str, name: str, uri: str) -> None:
+    """Append a `(lib …)` row to a sym/fp-lib-table, creating the table
+    if absent. No-op when a row with the same `uri` already exists."""
+    if table_path.is_file():
+        text = table_path.read_text()
+    else:
+        text = f"({head}\n  (version 7)\n)\n"
+    if f'(uri "{uri}")' in text:
+        return  # already registered
+    row = f'  (lib (name "{name}")(type "KiCad")(uri "{uri}")(options "")(descr "imported"))\n'
+    idx = text.rstrip().rfind(")")
+    if idx == -1:
+        text = f"({head}\n  (version 7)\n{row})\n"
+    else:
+        text = text[:idx] + row + text[idx:]
+    tmp = table_path.with_suffix(table_path.suffix + ".tmp")
+    tmp.write_text(text)
+    tmp.replace(table_path)
+
+
+@app.post("/project/{project_id}/library/import")
+async def project_library_import(project_id: str, req: LibraryImportRequest) -> dict[str, Any]:
+    """Import a dropped `.kicad_sym` / `.kicad_mod` into the project's
+    libraries (FR-043): write the file into a project-local library and
+    register it in the matching lib-table. Returns the assigned nickname
+    + lib-id prefix the editor can place from."""
+    opened = REGISTRY.get(project_id)
+    if opened is None:
+        raise HTTPException(status_code=404, detail=f"unknown project_id: {project_id}")
+    name = _safe_basename(req.filename)
+    project_path = Path(opened.path)
+
+    if req.kind == "symbol":
+        if not name.endswith(".kicad_sym"):
+            raise HTTPException(status_code=400, detail="symbol import needs a .kicad_sym file")
+        lib_dir = project_path / "imported-libs"
+        lib_dir.mkdir(parents=True, exist_ok=True)
+        (lib_dir / name).write_text(req.content)
+        nickname = name[: -len(".kicad_sym")] or "imported"
+        uri = f"${{KIPRJMOD}}/imported-libs/{name}"
+        _append_lib_table_row(project_path / "sym-lib-table", "sym_lib_table", nickname, uri)
+    else:  # footprint
+        if not name.endswith(".kicad_mod"):
+            raise HTTPException(status_code=400, detail="footprint import needs a .kicad_mod file")
+        pretty = project_path / "imported.pretty"
+        pretty.mkdir(parents=True, exist_ok=True)
+        (pretty / name).write_text(req.content)
+        nickname = "imported"
+        uri = "${KIPRJMOD}/imported.pretty"
+        _append_lib_table_row(project_path / "fp-lib-table", "fp_lib_table", nickname, uri)
+
+    lib_id_prefix = f"{nickname}:"
+    log.info("project_library_imported", project_id=project_id, kind=req.kind, nickname=nickname)
+    return {
+        "ok": True,
+        "project_id": project_id,
+        "kind": req.kind,
+        "nickname": nickname,
+        "lib_id_prefix": lib_id_prefix,
+        "uri": uri,
+    }
 
 
 @app.get("/project/{project_id}/dfm/check")
