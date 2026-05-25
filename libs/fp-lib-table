@@ -1,0 +1,7 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "Capacitor_SMD")(type "KiCad")(uri "${KICLAUDE_BUNDLED_LIBS}/footprints/Capacitor_SMD.pretty")(options "")(descr "Bundled KiCad Capacitor_SMD footprints (pinned 9.0.0)"))
+  (lib (name "RF_Module")(type "KiCad")(uri "${KICLAUDE_BUNDLED_LIBS}/footprints/RF_Module.pretty")(options "")(descr "Bundled KiCad RF_Module footprints (pinned 9.0.0)"))
+  (lib (name "Package_BGA")(type "KiCad")(uri "${KICLAUDE_BUNDLED_LIBS}/footprints/Package_BGA.pretty")(options "")(descr "Bundled KiCad Package_BGA footprints (pinned 9.0.0)"))
+  (lib (name "Connector_Coaxial")(type "KiCad")(uri "${KICLAUDE_BUNDLED_LIBS}/footprints/Connector_Coaxial.pretty")(options "")(descr "Bundled KiCad Connector_Coaxial footprints (pinned 9.0.0)"))
+)

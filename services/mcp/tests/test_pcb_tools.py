@@ -349,8 +349,10 @@ def test_claude_registry_contains_all_pcb_tools() -> None:
     }
     assert expected <= names
     # 13 M0/M1 schematic+core + 13 M2 PCB + 2 M3-P-06 sourcing
-    # (kc_part_search, kc_bom_price).
-    assert len(_CLAUDE_TOOLS) == 13 + 13 + 2
+    # (kc_part_search, kc_bom_price) + 8 T6 high-speed/sourcing tools
+    # (kc_decoupling/partition/impedance_check, kc_diffpair_declare,
+    # kc_length_match_set, kc_bom_get, kc_export_step, kc_session_fork).
+    assert len(_CLAUDE_TOOLS) == 13 + 13 + 2 + 8
 
 
 def test_ui_pcb_tools_are_not_in_claude_registry() -> None:

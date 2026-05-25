@@ -34,24 +34,24 @@
   (net 14 "USB_D+")
   (net 15 "USB_D-")
 
-  (footprint "RF_Module:ESP32-C6-WROOM-1"
+  (footprint "RF_Module:ESP32-C6-MINI-1"
     (layer "F.Cu")
     (uuid "e5732c60-0000-4000-a000-0000000000c6")
     (at 18.0 30.0 0.0)
     (property "Reference" "U1")
-    (property "Value" "ESP32-C6-WROOM-1")
+    (property "Value" "ESP32-C6-MINI-1")
     (pad "1" smd rect (at 0.0 -3.0) (size 0.9 1.5) (layers "F.Cu") (net 5 "RF_FEED"))
     (pad "2" smd rect (at 0.0 -1.0) (size 0.9 1.5) (layers "F.Cu") (net 1 "GND"))
     (pad "3" smd rect (at 0.0 1.0) (size 0.9 1.5) (layers "F.Cu") (net 2 "+3V3"))
     (pad "4" smd rect (at 0.0 3.0) (size 0.9 1.5) (layers "F.Cu") (net 14 "USB_D+"))
   )
 
-  (footprint "Package_BGA:DDR3L_BGA-16_4x4_P0.8mm"
+  (footprint "Package_BGA:BGA-16_1.92x1.92mm_Layout4x4_P0.5mm"
     (layer "F.Cu")
     (uuid "ddr31300-0000-4000-a000-000000000016")
     (at 40.0 28.0 0.0)
     (property "Reference" "U2")
-    (property "Value" "MT41K256M16-DDR3L")
+    (property "Value" "BGA-16")
     (pad "A1" smd circle (at -1.2 -1.2) (size 0.4 0.4) (layers "F.Cu") (net 1 "GND"))
     (pad "A2" smd circle (at -0.4 -1.2) (size 0.4 0.4) (layers "F.Cu") (net 3 "+1V35"))
     (pad "A3" smd circle (at 0.4 -1.2) (size 0.4 0.4) (layers "F.Cu") (net 1 "GND"))
@@ -70,7 +70,7 @@
     (pad "D4" smd circle (at 1.2 1.2) (size 0.4 0.4) (layers "F.Cu") (net 13 "DDR_DQS-"))
   )
 
-  (footprint "RF_Connectors:U.FL_Molex_73412-0110"
+  (footprint "Connector_Coaxial:U.FL_Molex_MCRF_73412-0110_Vertical"
     (layer "F.Cu")
     (uuid "0fc10000-0000-4000-a000-0000000000f1")
     (at 6.0 30.0 0.0)

@@ -12,8 +12,12 @@ Endpoints (M0-P-04):
 
 from __future__ import annotations
 
+import json
+import os
+import time
+import uuid
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from fastapi import FastAPI, HTTPException, Response
@@ -31,6 +35,9 @@ from kiserver.object_store import build_object_store
 from kiserver.project import REGISTRY
 from kiserver.sync import CloudSync
 from kiserver.telemetry import tracer
+
+if TYPE_CHECKING:
+    from kiserver.library import SearchHit
 
 log = structlog.get_logger(__name__)
 
@@ -108,6 +115,23 @@ class SyncPullRequest(BaseModel):
 
     manifest_key: str = Field(..., min_length=1, max_length=128)
     dest_dir: str = Field(..., min_length=1, max_length=4_096)
+
+
+class SessionForkRequest(BaseModel):
+    """Body for `POST /project/{id}/session/fork` (kc_session_fork). Forks
+    a chat session into a new branch under the project's session store."""
+
+    parent_session_id: str = Field(..., min_length=1, max_length=128)
+    label: str = Field(default="", max_length=200)
+
+
+class LibraryImportRequest(BaseModel):
+    """Body for `POST /project/{id}/library/import` (FR-043) — a
+    `.kicad_sym` / `.kicad_mod` dropped onto the editor."""
+
+    filename: str = Field(..., min_length=1, max_length=255)
+    content: str = Field(..., max_length=8_000_000)
+    kind: str = Field(..., pattern="^(symbol|footprint)$")
 
 
 @app.get("/health")
@@ -440,6 +464,204 @@ async def share_file(token: str, path: str) -> Response:
             status_code=409, detail=f"blob for {path!r} missing from object store"
         )
     return Response(content=blob, media_type="application/octet-stream")
+
+
+def bundled_libs_dir() -> Path | None:
+    """Locate the pinned bundled library mirror (SPEC §9.5 / FR-040 / D6).
+
+    Honours `$KICLAUDE_BUNDLED_LIBS` first (set by the daemon/CI so the
+    `${KICLAUDE_BUNDLED_LIBS}` lib-table URIs resolve regardless of where
+    the repo lives); otherwise falls back to the in-repo `libs/` directory
+    two-plus levels above this file. Returns `None` when no mirror with a
+    `sym-lib-table` is present, so a deployment without the mirror simply
+    indexes the project's own libraries."""
+    env = os.environ.get("KICLAUDE_BUNDLED_LIBS")
+    candidates = (
+        [Path(env).expanduser()]
+        if env
+        else [Path(__file__).resolve().parents[4] / "libs"]
+    )
+    for cand in candidates:
+        if (cand / "sym-lib-table").is_file():
+            return cand
+    return None
+
+
+def _merge_hits(
+    primary: list[SearchHit], secondary: list[SearchHit], limit: int
+) -> list[SearchHit]:
+    """Merge two ranked hit lists, deduping by `lib_id` (the project's own
+    libraries win over the bundled mirror), then re-rank by score."""
+    seen = {h.lib_id for h in primary}
+    merged = list(primary) + [h for h in secondary if h.lib_id not in seen]
+    merged.sort(key=lambda h: (-h.score, h.lib_id))
+    return merged[:limit]
+
+
+@app.get("/project/{project_id}/library/search")
+def project_library_search(
+    project_id: str, query: str, limit: int = 25
+) -> dict[str, Any]:
+    """Ranked symbol-library search for the opened project (FR-040/FR-041).
+
+    Indexes (and SQLite-caches) the project's own `sym-lib-table` **and**
+    the pinned bundled mirror, then returns scored hits merged across both —
+    the project's libraries ranked first, the bundled mirror filling in the
+    standard KiCad parts. Each hit carries `lib_id`, `footprint_filter`,
+    `datasheet`, etc. — the raw material for kc_mpn_resolve's candidates.
+    Returns an empty hit list (not an error) when neither source resolves."""
+    opened = REGISTRY.get(project_id)
+    if opened is None:
+        raise HTTPException(status_code=404, detail=f"unknown project_id: {project_id}")
+    query = (query or "").strip()
+    if not query:
+        return {"ok": True, "project_id": project_id, "query": query, "hits": []}
+    from kiserver.library import LibraryIndex
+
+    cache_dir = Path(opened.path) / ".kiclaude" / "library-cache"
+    capped = max(1, min(limit, 100))
+    hits: list[SearchHit] = []
+
+    # 1. The project's own pinned libraries (if it declares any).
+    sym_lib_table = Path(opened.path) / "sym-lib-table"
+    if sym_lib_table.is_file():
+        try:
+            hits = LibraryIndex.open(sym_lib_table, cache_dir).search(query, limit=capped)
+        except (FileNotFoundError, OSError, ValueError) as e:
+            # A malformed/empty project table is not fatal — fall through to the mirror.
+            log.info("library_search_unavailable", project_id=project_id, error=str(e))
+
+    # 2. The bundled mirror (FR-040: scanned alongside the project's libraries).
+    bundled = bundled_libs_dir()
+    if bundled is not None:
+        try:
+            b_index = LibraryIndex.open(
+                bundled / "sym-lib-table",
+                cache_dir / "bundled",
+                overrides={"KICLAUDE_BUNDLED_LIBS": str(bundled)},
+            )
+            hits = _merge_hits(hits, b_index.search(query, limit=capped), capped)
+        except (FileNotFoundError, OSError, ValueError) as e:
+            log.info("bundled_library_unavailable", error=str(e))
+
+    return {
+        "ok": True,
+        "project_id": project_id,
+        "query": query,
+        "hits": [h.to_dict() for h in hits],
+    }
+
+
+@app.post("/project/{project_id}/session/fork")
+def project_session_fork(project_id: str, req: SessionForkRequest) -> dict[str, Any]:
+    """Fork a chat session (kc_session_fork / SPEC §8.4). Writes a new
+    session manifest under `<project>/.kiclaude/sessions/` recording
+    `forked_from` the parent, in the shape the agent's M1-P-07 session
+    layer reads. Returns the new session id."""
+    opened = REGISTRY.get(project_id)
+    if opened is None:
+        raise HTTPException(status_code=404, detail=f"unknown project_id: {project_id}")
+    project_path = Path(opened.path)
+    sessions_dir = project_path / ".kiclaude" / "sessions"
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+    new_id = str(uuid.uuid4())
+    now = time.time()
+    manifest = {
+        "project_id": project_id,
+        "session_id": new_id,
+        "project_path": str(project_path),
+        "started_at_unix": now,
+        "last_seen_at_unix": now,
+        "schema_version": 1,
+        "forked_from": req.parent_session_id,
+        "label": req.label,
+    }
+    target = sessions_dir / f"{new_id}.json"
+    tmp = target.with_suffix(".tmp")
+    tmp.write_text(json.dumps(manifest, sort_keys=True, indent=2))
+    tmp.replace(target)
+    log.info(
+        "project_session_forked",
+        project_id=project_id,
+        parent=req.parent_session_id,
+        new_session_id=new_id,
+    )
+    return {"ok": True, "new_session_id": new_id, "forked_from": req.parent_session_id}
+
+
+def _safe_basename(filename: str) -> str:
+    """Strip any path components — imports must land inside the project,
+    never escape it via `../`."""
+    return Path(filename).name
+
+
+def _append_lib_table_row(table_path: Path, head: str, name: str, uri: str) -> None:
+    """Append a (lib ...) row to a sym/fp-lib-table, creating the table
+    if absent. No-op when a row with the same uri already exists."""
+    import threading
+    if not hasattr(_append_lib_table_row, "_lock"):
+        _append_lib_table_row._lock = threading.Lock()
+    with _append_lib_table_row._lock:
+    """Append a `(lib …)` row to a sym/fp-lib-table, creating the table
+    if absent. No-op when a row with the same `uri` already exists."""
+    if table_path.is_file():
+        text = table_path.read_text()
+    else:
+        text = f"({head}\n  (version 7)\n)\n"
+    if f'(uri "{uri}")' in text:
+        return  # already registered
+    row = f'  (lib (name "{name}")(type "KiCad")(uri "{uri}")(options "")(descr "imported"))\n'
+    idx = text.rstrip().rfind(")")
+    if idx == -1:
+        text = f"({head}\n  (version 7)\n{row})\n"
+    else:
+        text = text[:idx] + row + text[idx:]
+    tmp = table_path.with_suffix(table_path.suffix + ".tmp")
+    tmp.write_text(text)
+    tmp.replace(table_path)
+
+
+@app.post("/project/{project_id}/library/import")
+def project_library_import(project_id: str, req: LibraryImportRequest) -> dict[str, Any]:
+    """Import a dropped `.kicad_sym` / `.kicad_mod` into the project's
+    libraries (FR-043): write the file into a project-local library and
+    register it in the matching lib-table. Returns the assigned nickname
+    + lib-id prefix the editor can place from."""
+    opened = REGISTRY.get(project_id)
+    if opened is None:
+        raise HTTPException(status_code=404, detail=f"unknown project_id: {project_id}")
+    name = _safe_basename(req.filename)
+    project_path = Path(opened.path)
+
+    if req.kind == "symbol":
+        if not name.endswith(".kicad_sym"):
+            raise HTTPException(status_code=400, detail="symbol import needs a .kicad_sym file")
+        lib_dir = project_path / "imported-libs"
+        lib_dir.mkdir(parents=True, exist_ok=True)
+        (lib_dir / name).write_text(req.content)
+        nickname = name[: -len(".kicad_sym")] or "imported"
+        uri = f"${{KIPRJMOD}}/imported-libs/{name}"
+        _append_lib_table_row(project_path / "sym-lib-table", "sym_lib_table", nickname, uri)
+    else:  # footprint
+        if not name.endswith(".kicad_mod"):
+            raise HTTPException(status_code=400, detail="footprint import needs a .kicad_mod file")
+        pretty = project_path / "imported.pretty"
+        pretty.mkdir(parents=True, exist_ok=True)
+        (pretty / name).write_text(req.content)
+        nickname = "imported"
+        uri = "${KIPRJMOD}/imported.pretty"
+        _append_lib_table_row(project_path / "fp-lib-table", "fp_lib_table", nickname, uri)
+
+    lib_id_prefix = f"{nickname}:"
+    log.info("project_library_imported", project_id=project_id, kind=req.kind, nickname=nickname)
+    return {
+        "ok": True,
+        "project_id": project_id,
+        "kind": req.kind,
+        "nickname": nickname,
+        "lib_id_prefix": lib_id_prefix,
+        "uri": uri,
+    }
 
 
 @app.get("/project/{project_id}/dfm/check")

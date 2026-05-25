@@ -1,0 +1,8 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "Device")(type "KiCad")(uri "${KICLAUDE_BUNDLED_LIBS}/symbols/Device.kicad_sym")(options "")(descr "Bundled KiCad Device library (pinned 9.0.0)"))
+  (lib (name "power")(type "KiCad")(uri "${KICLAUDE_BUNDLED_LIBS}/symbols/power.kicad_sym")(options "")(descr "Bundled KiCad power library (pinned 9.0.0)"))
+  (lib (name "Connector")(type "KiCad")(uri "${KICLAUDE_BUNDLED_LIBS}/symbols/Connector.kicad_sym")(options "")(descr "Bundled KiCad Connector library (pinned 9.0.0)"))
+  (lib (name "Regulator_Switching")(type "KiCad")(uri "${KICLAUDE_BUNDLED_LIBS}/symbols/Regulator_Switching.kicad_sym")(options "")(descr "Bundled KiCad Regulator_Switching library (pinned 9.0.0)"))
+  (lib (name "RF_Module")(type "KiCad")(uri "${KICLAUDE_BUNDLED_LIBS}/symbols/RF_Module.kicad_sym")(options "")(descr "Bundled KiCad RF_Module library (pinned 9.0.0)"))
+)

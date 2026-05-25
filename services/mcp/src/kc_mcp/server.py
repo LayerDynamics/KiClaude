@@ -15,11 +15,19 @@ from typing import Any
 from claude_agent_sdk import McpSdkServerConfig, create_sdk_mcp_server
 
 from ._version import __version__
+from .tools.bom import kc_bom_get
 from .tools.diff import kc_diff
 from .tools.drc import kc_drc
 from .tools.erc import kc_erc
-from .tools.export import kc_export_fab
+from .tools.export import kc_export_fab, kc_export_step
 from .tools.freerouting import kc_route_freerouting
+from .tools.highspeed import (
+    kc_decoupling_check,
+    kc_diffpair_declare,
+    kc_impedance_check,
+    kc_length_match_set,
+    kc_partition_check,
+)
 from .tools.kcir import kc_kcir_get
 from .tools.label import kc_label_attach
 from .tools.mpn import kc_mpn_resolve
@@ -29,6 +37,7 @@ from .tools.ping import kc_ping
 from .tools.place import kc_footprint_place_hint, kc_footprint_remove
 from .tools.project import kc_project_open, kc_project_save
 from .tools.route import kc_track_remove, kc_track_route
+from .tools.session import kc_session_fork
 from .tools.snapshot import kc_snapshot_create, kc_snapshot_revert
 from .tools.sourcing import kc_bom_price, kc_part_search
 from .tools.symbol import kc_symbol_add, kc_symbol_edit
@@ -72,6 +81,17 @@ _CLAUDE_TOOLS = [
     # Mouser/Octopart/JLCPCB plug in via the same ABC under M3-P-01/02/04).
     kc_part_search,
     kc_bom_price,
+    # M3 high-speed / SI + sourcing surface completing SPEC §A.2.1
+    # (Todo §1 / T6): the design-intent checks, diff-pair + length-match
+    # declaration, BOM, STEP export, and session fork.
+    kc_decoupling_check,
+    kc_partition_check,
+    kc_impedance_check,
+    kc_diffpair_declare,
+    kc_length_match_set,
+    kc_bom_get,
+    kc_export_step,
+    kc_session_fork,
 ]
 
 

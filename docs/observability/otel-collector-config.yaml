@@ -1,0 +1,65 @@
+# kiclaude OpenTelemetry Collector preset (SPEC §8.8).
+#
+# The agent service (services/agent) emits a span per lifecycle hook —
+# span names `agent.hook.pre_tool_use` / `post_tool_use` /
+# `session_start` / `session_end` — carrying the attributes the §13
+# gate #9 telemetry contract asserts: `tool_name`, `session_id`,
+# `project_id`, `duration_ms` (post only), plus `hook_event` and
+# `parent_session_id` for subagent attribution.
+#
+# This config receives those spans over OTLP, derives RED-style metrics
+# from them via the spanmetrics connector, exports the metrics to
+# Prometheus (scraped by Grafana — see grafana/), and echoes spans to
+# stdout (the SPEC's default sink). Run with the OpenTelemetry Collector
+# Contrib distribution:
+#
+#   otelcol-contrib --config docs/observability/otel-collector-config.yaml
+#
+# Point the agent at it: OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+connectors:
+  # Turn spans into RED metrics: `calls_total` (counter) and
+  # `duration_milliseconds` (histogram), labelled by span name +
+  # the kiclaude hook attributes so panels can break down by tool.
+  spanmetrics:
+    histogram:
+      unit: ms
+      explicit:
+        buckets: [50ms, 100ms, 250ms, 500ms, 800ms, 1500ms, 3000ms, 8000ms]
+    dimensions:
+      - name: tool_name
+      - name: project_id
+      - name: hook_event
+    metrics_flush_interval: 15s
+
+processors:
+  batch:
+    timeout: 5s
+
+exporters:
+  # Prometheus scrape target for Grafana.
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    enable_open_metrics: true
+  # Mirrors the SPEC's default stdout-JSONL sink for raw spans.
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [spanmetrics, debug]
+    metrics:
+      receivers: [spanmetrics]
+      processors: [batch]
+      exporters: [prometheus]
