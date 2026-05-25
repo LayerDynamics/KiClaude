@@ -616,7 +616,7 @@ def _append_lib_table_row(table_path: Path, head: str, name: str, uri: str) -> N
 
 
 @app.post("/project/{project_id}/library/import")
-async def project_library_import(project_id: str, req: LibraryImportRequest) -> dict[str, Any]:
+def project_library_import(project_id: str, req: LibraryImportRequest) -> dict[str, Any]:
     """Import a dropped `.kicad_sym` / `.kicad_mod` into the project's
     libraries (FR-043): write the file into a project-local library and
     register it in the matching lib-table. Returns the assigned nickname
