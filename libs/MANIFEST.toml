@@ -85,3 +85,31 @@ file = "footprints/Connector_Coaxial.pretty/U.FL_Molex_MCRF_73412-0110_Vertical.
 url = "https://gitlab.com/kicad/libraries/kicad-footprints/-/raw/9.0.0/Connector_Coaxial.pretty/U.FL_Molex_MCRF_73412-0110_Vertical.kicad_mod"
 sha256 = "00b8b7491b50659c6cc07bbffa483a6d1862a1fc2e8569a4a991e80e0bc1348d"
 
+[[library]]
+kind = "model3d"
+nickname = "RF_Module"
+file = "packages3D/RF_Module.3dshapes/ESP32-S3-WROOM-1.step"
+url = "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/9.0.0/RF_Module.3dshapes/ESP32-S3-WROOM-1.step"
+sha256 = "3e35bb7ba7d030d88855fcf968398c8670934c7dca08b4e30b2c578bc1e13954"
+
+[[library]]
+kind = "model3d"
+nickname = "Package_BGA"
+file = "packages3D/Package_BGA.3dshapes/BGA-16_1.92x1.92mm_Layout4x4_P0.5mm.step"
+url = "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/9.0.0/Package_BGA.3dshapes/BGA-16_1.92x1.92mm_Layout4x4_P0.5mm.step"
+sha256 = "1bcb11e9c32534aae2e04c6c6dc8fe7d554135440501530e376bcadd02606b75"
+
+[[library]]
+kind = "model3d"
+nickname = "Capacitor_SMD"
+file = "packages3D/Capacitor_SMD.3dshapes/C_0402_1005Metric.step"
+url = "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/9.0.0/Capacitor_SMD.3dshapes/C_0402_1005Metric.step"
+sha256 = "03e44c4b2b727b8d4b6b1fd598cbd12dd5e614f1dfeefa96a92a07e3a3b312a2"
+
+[[library]]
+kind = "model3d"
+nickname = "Capacitor_SMD"
+file = "packages3D/Capacitor_SMD.3dshapes/C_0603_1608Metric.step"
+url = "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/9.0.0/Capacitor_SMD.3dshapes/C_0603_1608Metric.step"
+sha256 = "4857b3dc717675bf1fb22edda622ac3b3ae03cf44d81eefaf3fa3ba3a86d84c1"
+
