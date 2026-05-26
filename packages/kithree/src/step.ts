@@ -10,7 +10,10 @@
  */
 
 import { BufferAttribute, BufferGeometry } from "three";
-import occtimportjs, { type OcctModule } from "occt-import-js";
+// Type-only import: erased at compile time so the ~7 MB wasm runtime is NOT
+// pulled into the bundle here. The actual module is dynamically imported inside
+// occt() below — see the lazy-load note there.
+import type { OcctModule } from "occt-import-js";
 
 /** One tessellated solid from a STEP file, in the file's native units (mm). */
 export interface StepMesh {
@@ -32,7 +35,10 @@ let _occt: Promise<OcctModule> | null = null;
  * actually needs a 3D model. */
 async function occt(): Promise<OcctModule> {
   if (_occt === null) {
-    _occt = occtimportjs();
+    _occt = (async () => {
+      const { default: occtimportjs } = await import("occt-import-js");
+      return occtimportjs();
+    })();
   }
   return _occt;
 }

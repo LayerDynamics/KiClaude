@@ -266,19 +266,51 @@ export async function loadThreeSceneWithModels(
   if (boardMesh) group.add(boardMesh);
 
   // Decode each distinct model once; many placements share a model_path.
+  // Pre-fetch + tessellate every unique path in parallel so the per-placement
+  // loop below is a pure CPU walk. This turns a chain of N serialised awaits
+  // (network fetch + OCCT decode, one after another) into a single Promise.all
+  // fan-out — the dominant win on boards with many components.
   const geomCache = new Map<string, BufferGeometry | null>();
+  if (opts.fetchModel) {
+    const fetchModel = opts.fetchModel;
+    const uniquePaths = Array.from(
+      new Set(
+        scene.placements
+          .map((p) => p.model_path)
+          .filter((path): path is string => !!path),
+      ),
+    );
+    await Promise.all(
+      uniquePaths.map(async (path) => {
+        const geom = await resolveModelGeometry(path, fetchModel, geomCache, resources);
+        geomCache.set(path, geom);
+      }),
+    );
+  }
+
+  // One material shared by every real-model instance — the STEP files carry no
+  // colour of their own yet, so a single MeshStandardMaterial serves them all
+  // instead of allocating one per placement. Pushed once so dispose() frees it
+  // exactly once.
+  const defaultModelMaterial = new MeshStandardMaterial({
+    color: new Color(DEFAULT_MODEL_COLOR),
+    metalness: 0.4,
+    roughness: 0.5,
+  });
+  resources.materials.push(defaultModelMaterial);
 
   for (const placement of scene.placements) {
     let mesh: Mesh | null = null;
     if (opts.fetchModel && placement.model_path) {
-      const geom = await resolveModelGeometry(
-        placement.model_path,
-        opts.fetchModel,
-        geomCache,
-        resources,
-      );
+      const geom = geomCache.get(placement.model_path) ?? null;
       if (geom) {
-        mesh = buildPlacementModel(placement, geom, resources, centroid, scene.board_thickness_mm);
+        mesh = buildPlacementModel(
+          placement,
+          geom,
+          defaultModelMaterial,
+          centroid,
+          scene.board_thickness_mm,
+        );
       }
     }
     if (mesh === null) {
@@ -330,21 +362,19 @@ async function resolveModelGeometry(
 /** Pose a real tessellated model on the board: the model's Z-up frame is
  * rotated to the board's Y-up frame, then the placement's in-plane offset and
  * KiCad (rx, ry, rz) rotation + bottom flip are applied — mirroring the box
- * marker's coordinate handling. Exact KiCad-faithful seating is M4 polish. */
+ * marker's coordinate handling. Exact KiCad-faithful seating is M4 polish.
+ *
+ * The `material` is supplied by the caller (a single instance shared across all
+ * model placements), so — unlike its box-marker sibling — this function does
+ * not allocate or register a material in `resources`. */
 function buildPlacementModel(
   placement: ScenePlacement,
   geometry: BufferGeometry,
-  resources: { geometries: BufferGeometry[]; materials: Material[] },
+  material: Material,
   centroid: { x: number; y: number },
   boardThicknessMm: number,
 ): Mesh {
-  const mat = new MeshStandardMaterial({
-    color: new Color(DEFAULT_MODEL_COLOR),
-    metalness: 0.4,
-    roughness: 0.5,
-  });
-  resources.materials.push(mat);
-  const mesh = new Mesh(geometry, mat);
+  const mesh = new Mesh(geometry, material);
   mesh.name = `kithree.model.${placement.refdes || placement.model_path}`;
 
   const [px, py, pz] = placement.position_mm;
