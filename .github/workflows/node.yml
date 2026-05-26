@@ -28,14 +28,34 @@ jobs:
           node-version: "22"
           cache: pnpm
 
+      # client depends on the ki / cad wasm packages via file:../crates/*/pkg,
+      # so those pkg dirs must be built before pnpm can resolve the workspace.
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "."
+      - name: Install wasm-pack
+        uses: jetli/wasm-pack-action@v0.4.0
+      # `--features wasm-api` enables ki's src/wasm.rs exports (off by default
+      # so cad's wasm build doesn't drag in ki's #[wasm_bindgen] surface).
+      - name: wasm-pack build (ki)
+        run: wasm-pack build --target web crates/ki -- --features wasm-api
+      - name: wasm-pack build (cad)
+        run: wasm-pack build --target web crates/cad
+
       - name: pnpm install
         run: pnpm install --frozen-lockfile=false
 
       - name: pnpm -r typecheck
         run: pnpm -r typecheck
 
-      - name: pnpm -r test
-        run: pnpm -r test
+      # tests/{e2e,perf,a11y} are Playwright suites that need browsers + a running
+      # dev server (run by the e2e workflow). node runs the vitest unit suites only.
+      - name: pnpm -r test (unit packages)
+        run: pnpm -r --filter '!./tests/*' test
 
       - name: pnpm -r build
         run: pnpm -r build
