@@ -10,7 +10,7 @@
  */
 
 import { BufferAttribute, BufferGeometry } from "three";
-import occtimportjs, { type OcctModule } from "occt-import-js";
+import { type OcctModule } from "occt-import-js";
 
 /** One tessellated solid from a STEP file, in the file's native units (mm). */
 export interface StepMesh {
