@@ -49,9 +49,11 @@ jobs:
           uv sync --all-extras --all-packages
           uv tool install maturin
           (cd crates/ki && VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv maturin develop --features python)
-          pnpm install --frozen-lockfile=false
+          # Build the ki / cad wasm packages before pnpm install — client's
+          # file:../crates/*/pkg deps must exist for pnpm to resolve them.
           wasm-pack build --target web crates/ki -- --features wasm-api
           wasm-pack build --target web crates/cad
+          pnpm install --frozen-lockfile=false
 
       - name: Install Playwright browsers
         if: hashFiles('tests/e2e/package.json') != ''
@@ -68,6 +70,17 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           cd tests/e2e
+          pnpm exec playwright test
+
+      # a11y is deterministic and auto-starts its own client dev server (:5318
+      # via its playwright webServer block), so it gets a real CI home here next
+      # to e2e. (perf is intentionally NOT run in CI: its ≥60 FPS gate is
+      # GPU/HW-dependent and would flake on headless shared runners — it stays a
+      # local/manual benchmark.)
+      - name: Run a11y suite
+        if: hashFiles('tests/a11y/package.json') != ''
+        run: |
+          cd tests/a11y
           pnpm exec playwright test
 
       - name: e2e suite missing (xfail-no-suite)
