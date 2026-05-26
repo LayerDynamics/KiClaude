@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -40,6 +41,10 @@ if TYPE_CHECKING:
     from kiserver.library import SearchHit
 
 log = structlog.get_logger(__name__)
+
+# Serialises read-modify-write of the on-disk lib-tables so concurrent
+# imports can't clobber each other mid-rewrite (mirrors library._CACHE_LOCK).
+_LIB_TABLE_LOCK = threading.Lock()
 
 
 app = FastAPI(
@@ -552,6 +557,60 @@ def project_library_search(
     }
 
 
+def _resolve_model_relpath(raw: str) -> str | None:
+    """Map a footprint `(model …)` path to a relative path under the bundled
+    `packages3D/` root (T10 / FR-029 / D6).
+
+    Handles `${KICAD7/8/9_3DMODEL_DIR}/Lib.3dshapes/Name.wrl` (3dshapes root)
+    and `${KICLAUDE_BUNDLED_LIBS}/packages3D/…` (libs root), strips the env-var
+    prefix, and — since T10 serves STEP geometry — swaps a `.wrl`/`.wrz` model
+    reference for its `.step` sibling. Returns `None` for absolute or otherwise
+    unusable paths so the caller can reject them."""
+    p = raw.strip().replace("\\", "/")
+    if not p:
+        return None
+    if p.startswith("${"):
+        close = p.find("}")
+        if close == -1:
+            return None
+        p = p[close + 1 :].lstrip("/")
+    if p.startswith("packages3D/"):
+        p = p[len("packages3D/") :]
+    if p.startswith("/") or Path(p).is_absolute():
+        return None
+    if p.lower().endswith((".wrl", ".wrz")):
+        p = p[: p.rfind(".")] + ".step"
+    return p or None
+
+
+@app.get("/project/{project_id}/model3d")
+def project_model3d(project_id: str, path: str) -> Response:
+    """Serve a 3D STEP component model from the bundled `packages3D/` mirror
+    (T10 / FR-029 / SPEC §6.6 / D6).
+
+    `path` is the footprint's `(model …)` reference; this resolves the env-var
+    prefix, swaps `.wrl` → its `.step` sibling, enforces that the target stays
+    inside the mirror, and streams the STEP bytes for the kithree viewer to
+    tessellate. 404 when the project/mirror/model is absent (the viewer then
+    renders its placement-box fallback); 400 on an unusable/escaping path."""
+    opened = REGISTRY.get(project_id)
+    if opened is None:
+        raise HTTPException(status_code=404, detail=f"unknown project_id: {project_id}")
+    bundled = bundled_libs_dir()
+    if bundled is None:
+        raise HTTPException(status_code=404, detail="no bundled library mirror available")
+    models_root = (bundled / "packages3D").resolve()
+    rel = _resolve_model_relpath(path)
+    if rel is None:
+        raise HTTPException(status_code=400, detail=f"unusable model path: {path}")
+    target = (models_root / rel).resolve()
+    if not target.is_relative_to(models_root):
+        raise HTTPException(status_code=400, detail="model path escapes the mirror")
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail=f"model not in mirror: {rel}")
+    return Response(content=target.read_bytes(), media_type="model/step")
+
+
 @app.post("/project/{project_id}/session/fork")
 def project_session_fork(project_id: str, req: SessionForkRequest) -> dict[str, Any]:
     """Fork a chat session (kc_session_fork / SPEC §8.4). Writes a new
@@ -596,29 +655,25 @@ def _safe_basename(filename: str) -> str:
 
 
 def _append_lib_table_row(table_path: Path, head: str, name: str, uri: str) -> None:
-    """Append a (lib ...) row to a sym/fp-lib-table, creating the table
-    if absent. No-op when a row with the same uri already exists."""
-    import threading
-    if not hasattr(_append_lib_table_row, "_lock"):
-        _append_lib_table_row._lock = threading.Lock()
-    with _append_lib_table_row._lock:
-    """Append a `(lib …)` row to a sym/fp-lib-table, creating the table
-    if absent. No-op when a row with the same `uri` already exists."""
-    if table_path.is_file():
-        text = table_path.read_text()
-    else:
-        text = f"({head}\n  (version 7)\n)\n"
-    if f'(uri "{uri}")' in text:
-        return  # already registered
-    row = f'  (lib (name "{name}")(type "KiCad")(uri "{uri}")(options "")(descr "imported"))\n'
-    idx = text.rstrip().rfind(")")
-    if idx == -1:
-        text = f"({head}\n  (version 7)\n{row})\n"
-    else:
-        text = text[:idx] + row + text[idx:]
-    tmp = table_path.with_suffix(table_path.suffix + ".tmp")
-    tmp.write_text(text)
-    tmp.replace(table_path)
+    """Append a `(lib …)` row to a sym/fp-lib-table, creating the table if
+    absent. No-op when a row with the same `uri` already exists. Guarded by a
+    module lock so concurrent imports don't clobber the table mid-rewrite."""
+    with _LIB_TABLE_LOCK:
+        if table_path.is_file():
+            text = table_path.read_text()
+        else:
+            text = f"({head}\n  (version 7)\n)\n"
+        if f'(uri "{uri}")' in text:
+            return  # already registered
+        row = f'  (lib (name "{name}")(type "KiCad")(uri "{uri}")(options "")(descr "imported"))\n'
+        idx = text.rstrip().rfind(")")
+        if idx == -1:
+            text = f"({head}\n  (version 7)\n{row})\n"
+        else:
+            text = text[:idx] + row + text[idx:]
+        tmp = table_path.with_suffix(table_path.suffix + ".tmp")
+        tmp.write_text(text)
+        tmp.replace(table_path)
 
 
 @app.post("/project/{project_id}/library/import")

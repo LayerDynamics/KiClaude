@@ -36,6 +36,26 @@ jobs:
         with:
           version: latest
 
+      # Tier B golden test (tests/golden — every_shipped_kicad_reference_board_parses)
+      # walks .kicad_pcb files under development/resources/kicad/{kicad-library,
+      # freerouting}. Those are gitignored external checkouts absent from a fresh
+      # CI checkout, so fetch them — pinned to the same commits the local dev tree
+      # uses — before any cargo test runs. Shallow single-commit fetches keep it fast.
+      - name: Fetch KiCad reference boards (Tier B resources)
+        run: |
+          set -euxo pipefail
+          fetch_pinned() {
+            dir="$1"; url="$2"; sha="$3"
+            mkdir -p "$dir"
+            git -C "$dir" init -q
+            git -C "$dir" remote add origin "$url" 2>/dev/null || git -C "$dir" remote set-url origin "$url"
+            git -C "$dir" fetch --depth 1 origin "$sha"
+            git -C "$dir" checkout -q FETCH_HEAD
+          }
+          fetch_pinned development/resources/kicad/kicad-library https://github.com/KiCad/kicad-library.git a1e4ad1f9b195bdd6ea90c62d928bc2ae5e842d6
+          fetch_pinned development/resources/kicad/freerouting   https://github.com/freerouting/freerouting.git 0477a8eab65d4c44dd0b7af1f984ae14f038687e
+          echo "Tier B .kicad_pcb available: $(find development/resources/kicad -name '*.kicad_pcb' | wc -l)"
+
       - name: cargo fmt --check
         run: cargo fmt --check --all
 

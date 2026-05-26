@@ -40,6 +40,13 @@ from pathlib import Path
 UPSTREAM_TAG = "9.0.0"
 SYMBOLS_REPO = "https://gitlab.com/kicad/libraries/kicad-symbols"
 FOOTPRINTS_REPO = "https://gitlab.com/kicad/libraries/kicad-footprints"
+PACKAGES3D_REPO = "https://gitlab.com/kicad/libraries/kicad-packages3D"
+
+_REPO_FOR_KIND = {
+    "symbol": SYMBOLS_REPO,
+    "footprint": FOOTPRINTS_REPO,
+    "model3d": PACKAGES3D_REPO,
+}
 
 LIBS_DIR = Path(__file__).resolve().parent.parent / "libs"
 MANIFEST_PATH = LIBS_DIR / "MANIFEST.toml"
@@ -50,15 +57,14 @@ class Entry:
     """One curated library file: which upstream repo path it comes from and
     where it lands under `libs/`."""
 
-    kind: str  # "symbol" | "footprint"
+    kind: str  # "symbol" | "footprint" | "model3d"
     nickname: str  # KiCad library nickname (the lib-table `name`)
     repo_path: str  # path within the upstream repo at UPSTREAM_TAG
     dest: str  # path under libs/ (relative, forward slashes)
 
     @property
     def url(self) -> str:
-        repo = SYMBOLS_REPO if self.kind == "symbol" else FOOTPRINTS_REPO
-        return f"{repo}/-/raw/{UPSTREAM_TAG}/{self.repo_path}"
+        return f"{_REPO_FOR_KIND[self.kind]}/-/raw/{UPSTREAM_TAG}/{self.repo_path}"
 
 
 # The curated subset: exactly the libraries/footprints the bundled examples
@@ -112,6 +118,35 @@ _CURATED: list[Entry] = [
         "Connector_Coaxial",
         "Connector_Coaxial.pretty/U.FL_Molex_MCRF_73412-0110_Vertical.kicad_mod",
         "footprints/Connector_Coaxial.pretty/U.FL_Molex_MCRF_73412-0110_Vertical.kicad_mod",
+    ),
+    # 3D STEP component models (T10 / FR-029 / D6). The .step siblings of the
+    # footprints' .wrl model refs — the kiserver model3d resolver swaps .wrl
+    # for .step and the kithree viewer tessellates them via occt-import-js.
+    # (ESP32-C6-MINI-1 and the U.FL connector ship only .wrl upstream, so they
+    # box-fall-back in the viewer — there is no .step to seed.)
+    Entry(
+        "model3d",
+        "RF_Module",
+        "RF_Module.3dshapes/ESP32-S3-WROOM-1.step",
+        "packages3D/RF_Module.3dshapes/ESP32-S3-WROOM-1.step",
+    ),
+    Entry(
+        "model3d",
+        "Package_BGA",
+        "Package_BGA.3dshapes/BGA-16_1.92x1.92mm_Layout4x4_P0.5mm.step",
+        "packages3D/Package_BGA.3dshapes/BGA-16_1.92x1.92mm_Layout4x4_P0.5mm.step",
+    ),
+    Entry(
+        "model3d",
+        "Capacitor_SMD",
+        "Capacitor_SMD.3dshapes/C_0402_1005Metric.step",
+        "packages3D/Capacitor_SMD.3dshapes/C_0402_1005Metric.step",
+    ),
+    Entry(
+        "model3d",
+        "Capacitor_SMD",
+        "Capacitor_SMD.3dshapes/C_0603_1608Metric.step",
+        "packages3D/Capacitor_SMD.3dshapes/C_0603_1608Metric.step",
     ),
 ]
 

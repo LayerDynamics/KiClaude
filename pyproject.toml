@@ -32,6 +32,16 @@ kiclaude-mcp = { workspace = true }
 kiclaude-kiserver = { workspace = true }
 kiclaude-kiconnector = { workspace = true }
 
+# Workspace-wide lint/type tooling. `uv sync` installs the `dev` group by
+# default, so CI's `uv run ruff` / `uv run mypy` can resolve the binaries.
+# These are repo-wide gates (configured under [tool.ruff] / [tool.mypy] below)
+# and belong at the workspace root rather than duplicated per service.
+[dependency-groups]
+dev = [
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

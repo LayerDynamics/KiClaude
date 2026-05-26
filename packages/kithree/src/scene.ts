@@ -35,6 +35,8 @@ import {
   Vector2,
 } from "three";
 
+import { decodeStep, mergeStepMeshes } from "./step";
+
 /** Mirrors `crates/cad/src/three_scene.rs::ScenePlacement` after
  * `serde_json::to_string`. Tuples land in JS as `[number, number, number]`. */
 export interface ScenePlacement {
@@ -110,32 +112,8 @@ export function loadThreeScene(
   const centroid = polygonCentroid(scene.board_outline_mm);
 
   // --- board ---------------------------------------------------------
-  let boardMesh: Mesh | null = null;
-  if (scene.board_outline_mm.length >= 3) {
-    const shape = new Shape(
-      scene.board_outline_mm.map(([x, y]) => new Vector2(x - centroid.x, -(y - centroid.y))),
-    );
-    const boardGeom = new ExtrudeGeometry(shape, {
-      depth: Math.max(scene.board_thickness_mm, 0.01),
-      bevelEnabled: false,
-      curveSegments: 12,
-    });
-    // Three.js extrudes along +Z by default; rotate −π/2 about X so
-    // +Z becomes the board's thickness axis and the XY plane is the
-    // board surface, matching the placement coordinate convention.
-    boardGeom.rotateX(-Math.PI / 2);
-    resources.geometries.push(boardGeom);
-    const boardMat = new MeshStandardMaterial({
-      color: new Color(theme.boardColor),
-      metalness: 0.1,
-      roughness: 0.7,
-      side: DoubleSide,
-    });
-    resources.materials.push(boardMat);
-    boardMesh = new Mesh(boardGeom, boardMat);
-    boardMesh.name = "kithree.board";
-    group.add(boardMesh);
-  }
+  const boardMesh = buildBoardMesh(scene, theme, resources, centroid);
+  if (boardMesh) group.add(boardMesh);
 
   // --- placement markers --------------------------------------------
   for (const placement of scene.placements) {
@@ -212,6 +190,214 @@ function buildPlacementMarker(
     mesh.rotateX(Math.PI);
   }
 
+  return mesh;
+}
+
+/** Build the extruded board mesh, or null when the scene has no outline.
+ * Shared by both the box-marker and real-model loaders. */
+function buildBoardMesh(
+  scene: ThreeScene,
+  theme: SceneTheme,
+  resources: { geometries: BufferGeometry[]; materials: Material[] },
+  centroid: { x: number; y: number },
+): Mesh | null {
+  if (scene.board_outline_mm.length < 3) return null;
+  const shape = new Shape(
+    scene.board_outline_mm.map(([x, y]) => new Vector2(x - centroid.x, -(y - centroid.y))),
+  );
+  const boardGeom = new ExtrudeGeometry(shape, {
+    depth: Math.max(scene.board_thickness_mm, 0.01),
+    bevelEnabled: false,
+    curveSegments: 12,
+  });
+  // Three.js extrudes along +Z by default; rotate −π/2 about X so +Z becomes
+  // the board's thickness axis and the XY plane is the board surface.
+  boardGeom.rotateX(-Math.PI / 2);
+  resources.geometries.push(boardGeom);
+  const boardMat = new MeshStandardMaterial({
+    color: new Color(theme.boardColor),
+    metalness: 0.1,
+    roughness: 0.7,
+    side: DoubleSide,
+  });
+  resources.materials.push(boardMat);
+  const boardMesh = new Mesh(boardGeom, boardMat);
+  boardMesh.name = "kithree.board";
+  return boardMesh;
+}
+
+/** Resolves a placement's `model_path` to STEP bytes (e.g. via the kiserver
+ * `model3d` route). Return `null` to fall back to a placement box. */
+export interface ModelFetcher {
+  (modelPath: string): Promise<Uint8Array | null>;
+}
+
+export interface LoadSceneOptions {
+  theme?: SceneTheme;
+  /** When set, real STEP geometry is fetched + tessellated per placement. */
+  fetchModel?: ModelFetcher;
+}
+
+/** Body colour for a component whose STEP carried no colour of its own. */
+const DEFAULT_MODEL_COLOR = 0x2b2b2b;
+
+/**
+ * Like {@link loadThreeScene}, but renders each placement's real STEP geometry
+ * when `opts.fetchModel` can supply the bytes — falling back to the
+ * colour-coded placement box when a model is missing or fails to decode (the
+ * common offline case). Each distinct `model_path` is fetched + tessellated
+ * once and shared across every instance that references it.
+ */
+export async function loadThreeSceneWithModels(
+  scene: ThreeScene,
+  opts: LoadSceneOptions = {},
+): Promise<LoadedScene> {
+  const theme = opts.theme ?? DEFAULT_THEME;
+  const group = new Group();
+  group.name = "kithree.scene";
+  const resources: { geometries: BufferGeometry[]; materials: Material[] } = {
+    geometries: [],
+    materials: [],
+  };
+  const markers = new Map<string, Mesh>();
+  const centroid = polygonCentroid(scene.board_outline_mm);
+
+  const boardMesh = buildBoardMesh(scene, theme, resources, centroid);
+  if (boardMesh) group.add(boardMesh);
+
+  // Decode each distinct model once; many placements share a model_path.
+  // Pre-fetch + tessellate every unique path in parallel so the per-placement
+  // loop below is a pure CPU walk. This turns a chain of N serialised awaits
+  // (network fetch + OCCT decode, one after another) into a single Promise.all
+  // fan-out — the dominant win on boards with many components.
+  const geomCache = new Map<string, BufferGeometry | null>();
+  if (opts.fetchModel) {
+    const fetchModel = opts.fetchModel;
+    const uniquePaths = Array.from(
+      new Set(
+        scene.placements
+          .map((p) => p.model_path)
+          .filter((path): path is string => !!path),
+      ),
+    );
+    await Promise.all(
+      uniquePaths.map(async (path) => {
+        const geom = await resolveModelGeometry(path, fetchModel, geomCache, resources);
+        geomCache.set(path, geom);
+      }),
+    );
+  }
+
+  // One material shared by every real-model instance — the STEP files carry no
+  // colour of their own yet, so a single MeshStandardMaterial serves them all
+  // instead of allocating one per placement. Pushed once so dispose() frees it
+  // exactly once.
+  const defaultModelMaterial = new MeshStandardMaterial({
+    color: new Color(DEFAULT_MODEL_COLOR),
+    metalness: 0.4,
+    roughness: 0.5,
+  });
+  resources.materials.push(defaultModelMaterial);
+
+  for (const placement of scene.placements) {
+    let mesh: Mesh | null = null;
+    if (opts.fetchModel && placement.model_path) {
+      const geom = geomCache.get(placement.model_path) ?? null;
+      if (geom) {
+        mesh = buildPlacementModel(
+          placement,
+          geom,
+          defaultModelMaterial,
+          centroid,
+          scene.board_thickness_mm,
+        );
+      }
+    }
+    if (mesh === null) {
+      mesh = buildPlacementMarker(placement, theme, resources, centroid, scene.board_thickness_mm);
+    }
+    group.add(mesh);
+    markers.set(placement.refdes || placement.model_path, mesh);
+  }
+
+  return {
+    group,
+    boardMesh,
+    markers,
+    dispose() {
+      for (const g of resources.geometries) g.dispose();
+      for (const m of resources.materials) m.dispose();
+      resources.geometries.length = 0;
+      resources.materials.length = 0;
+      markers.clear();
+    },
+  };
+}
+
+/** Fetch + tessellate a model once, caching by path (including a cached
+ * `null` for the unavailable/undecodable case so the box fallback is sticky).
+ * Pushes a successfully-built geometry into `resources` for disposal. */
+async function resolveModelGeometry(
+  modelPath: string,
+  fetchModel: ModelFetcher,
+  cache: Map<string, BufferGeometry | null>,
+  resources: { geometries: BufferGeometry[]; materials: Material[] },
+): Promise<BufferGeometry | null> {
+  const cached = cache.get(modelPath);
+  if (cached !== undefined) return cached;
+  let geom: BufferGeometry | null = null;
+  try {
+    const bytes = await fetchModel(modelPath);
+    if (bytes && bytes.length > 0) {
+      geom = mergeStepMeshes(await decodeStep(bytes));
+      resources.geometries.push(geom);
+    }
+  } catch {
+    geom = null;
+  }
+  cache.set(modelPath, geom);
+  return geom;
+}
+
+/** Pose a real tessellated model on the board: the model's Z-up frame is
+ * rotated to the board's Y-up frame, then the placement's in-plane offset and
+ * KiCad (rx, ry, rz) rotation + bottom flip are applied — mirroring the box
+ * marker's coordinate handling. Exact KiCad-faithful seating is M4 polish.
+ *
+ * The `material` is supplied by the caller (a single instance shared across all
+ * model placements), so — unlike its box-marker sibling — this function does
+ * not allocate or register a material in `resources`. */
+function buildPlacementModel(
+  placement: ScenePlacement,
+  geometry: BufferGeometry,
+  material: Material,
+  centroid: { x: number; y: number },
+  boardThicknessMm: number,
+): Mesh {
+  const mesh = new Mesh(geometry, material);
+  mesh.name = `kithree.model.${placement.refdes || placement.model_path}`;
+
+  const [px, py, pz] = placement.position_mm;
+  const xOffset = px - centroid.x;
+  const zOffset = -(py - centroid.y); // KiCad Y-down → three Z
+  const surfaceY = placement.side === "bottom" ? 0 : boardThicknessMm;
+  mesh.position.set(
+    xOffset,
+    surfaceY + (placement.side === "bottom" ? -pz : pz),
+    zOffset,
+  );
+
+  // KiCad models are authored Z-up in mm; the board is Y-up after its extrude
+  // rotation. Bring the model to Y-up with −90° about X, then compose the
+  // KiCad model rotation (rx, ry, rz) the same way the box marker does.
+  const [rx, ry, rz] = placement.rotation_deg;
+  mesh.rotation.order = "ZYX";
+  mesh.rotation.x = -Math.PI / 2 + degToRad(rx);
+  mesh.rotation.y = degToRad(rz);
+  mesh.rotation.z = degToRad(ry);
+  if (placement.side === "bottom") {
+    mesh.rotateX(Math.PI);
+  }
   return mesh;
 }
 
