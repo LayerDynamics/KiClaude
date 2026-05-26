@@ -26,6 +26,10 @@ jobs:
           workspaces: "."
       - name: Install wasm-pack
         uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          # Pin: the action's "latest" resolves to ancient v0.9.1 on macOS, which
+          # can't parse Cargo.toml workspace inheritance (license.workspace = true).
+          version: "v0.15.0"
 
       # Node — the gateway + client run from this stack.
       - uses: pnpm/action-setup@v4
@@ -54,6 +58,9 @@ jobs:
           wasm-pack build --target web crates/ki -- --features wasm-api
           wasm-pack build --target web crates/cad
           pnpm install --frozen-lockfile=false
+          # Build @kiclaude/kithree so its dist/ exists — client imports it and
+          # the Playwright dev server (vite) resolves it via its dist entry.
+          pnpm -F @kiclaude/kithree build
 
       - name: Install Playwright browsers
         if: hashFiles('tests/e2e/package.json') != ''

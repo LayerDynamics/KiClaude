@@ -42,6 +42,10 @@ jobs:
       # before pnpm install can resolve the workspace.
       - name: Install wasm-pack
         uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          # Pin: the action's "latest" resolves to ancient v0.9.1 on macOS, which
+          # can't parse Cargo.toml workspace inheritance (license.workspace = true).
+          version: "v0.15.0"
       - name: wasm-pack build (ki)
         run: wasm-pack build --target web crates/ki -- --features wasm-api
       - name: wasm-pack build (cad)
