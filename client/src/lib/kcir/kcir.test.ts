@@ -925,7 +925,11 @@ describe("examples/blinky round-trip", () => {
       "utf8",
     );
     expect(raw.startsWith("(kicad_pcb")).toBe(true);
-    expect(raw).toContain("MCU_Espressif:ESP32-S3-WROOM-1");
+    // The blinky fixture uses the real KiCad footprint library: the
+    // ESP32-S3-WROOM-1 module footprint lives in RF_Module.pretty, not
+    // MCU_Espressif (that's the schematic symbol lib). T9 (5f9fe73) corrected
+    // the fixture to real parts; this assertion tracks that.
+    expect(raw).toContain("RF_Module:ESP32-S3-WROOM-1");
     expect(raw).toContain("Capacitor_SMD:C_0603_1608Metric");
   });
 
