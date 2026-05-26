@@ -584,7 +584,7 @@ def _resolve_model_relpath(raw: str) -> str | None:
 
 
 @app.get("/project/{project_id}/model3d")
-async def project_model3d(project_id: str, path: str) -> Response:
+def project_model3d(project_id: str, path: str) -> Response:
     """Serve a 3D STEP component model from the bundled `packages3D/` mirror
     (T10 / FR-029 / SPEC §6.6 / D6).
 

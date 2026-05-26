@@ -104,11 +104,14 @@ export function mergeStepMeshes(meshes: StepMesh[]): BufferGeometry {
     } else {
       anyMissingNormals = true;
     }
-    // Shift this solid's indices past the vertices already written.
-    indices.set(
-      m.indices.map((i) => i + baseVertex),
-      indexOffset,
-    );
+    // Shift this solid's indices past the vertices already written, without
+    // allocating a temporary array. Iterate the typed array directly so each
+    // element is typed `number`; an indexed read would be `number | undefined`
+    // under noUncheckedIndexedAccess.
+    let writeIdx = indexOffset;
+    for (const idx of m.indices) {
+      indices[writeIdx++] = idx + baseVertex;
+    }
     floatOffset += m.positions.length;
     indexOffset += m.indices.length;
     baseVertex += m.positions.length / 3;
