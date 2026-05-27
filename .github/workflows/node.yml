@@ -39,6 +39,10 @@ jobs:
           workspaces: "."
       - name: Install wasm-pack
         uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          # Pin: the action's "latest" resolves to ancient v0.9.1 on macOS, which
+          # can't parse Cargo.toml workspace inheritance (license.workspace = true).
+          version: "v0.15.0"
       # `--features wasm-api` enables ki's src/wasm.rs exports (off by default
       # so cad's wasm build doesn't drag in ki's #[wasm_bindgen] surface).
       - name: wasm-pack build (ki)
@@ -49,6 +53,12 @@ jobs:
       - name: pnpm install
         run: pnpm install --frozen-lockfile=false
 
+      # Build first: client imports @kiclaude/kithree, whose types/JS resolve to
+      # its dist/, so the workspace libs must be built before client typechecks.
+      # pnpm -r builds in topological order, so kithree lands before client.
+      - name: pnpm -r build
+        run: pnpm -r build
+
       - name: pnpm -r typecheck
         run: pnpm -r typecheck
 
@@ -56,6 +66,3 @@ jobs:
       # dev server (run by the e2e workflow). node runs the vitest unit suites only.
       - name: pnpm -r test (unit packages)
         run: pnpm -r --filter '!./tests/*' test
-
-      - name: pnpm -r build
-        run: pnpm -r build

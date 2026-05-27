@@ -70,19 +70,22 @@ async def run_panelize(
             f"target must be a .kicad_pcb, got {target.suffix or 'no extension'}",
             _duration(started),
         )
+    # Validate the request (config/preset) before checking external-tool
+    # availability, so a missing config is reported as such regardless of whether
+    # kikit happens to be installed (CI runners have no kikit on PATH).
+    if config is None and preset_path is None:
+        return _err(
+            str(target),
+            str(out),
+            "either `config` or `preset_path` must be supplied",
+            _duration(started),
+        )
     binary = shutil.which(kikit_binary)
     if binary is None:
         return _err(
             str(target),
             str(out),
             f"{kikit_binary} not on PATH",
-            _duration(started),
-        )
-    if config is None and preset_path is None:
-        return _err(
-            str(target),
-            str(out),
-            "either `config` or `preset_path` must be supplied",
             _duration(started),
         )
     try:

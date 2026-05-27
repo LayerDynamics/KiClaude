@@ -18,20 +18,27 @@ import { expect, test } from "@playwright/test";
 test.describe("M0-Q-03 smoke", () => {
   test("blinky board renders via kicanvas", async ({ page }) => {
     const consoleErrors: string[] = [];
-    // The chat sidebar tries to open a WebSocket to the gateway at
-    // :8080. The gateway is intentionally NOT started by the e2e
-    // webServer block — only the client dev server is. Filter out the
-    // expected connection-refused noise; everything else should fail
-    // the test.
-    const isExpectedWsRefusal = (s: string): boolean =>
-      /WebSocket connection.*\/ws.*(failed|refused)/i.test(s);
+    // Two console errors are environment conditions in this client-only smoke,
+    // not app regressions, so they are filtered out:
+    //   1. The chat sidebar opens a WebSocket to the gateway at :8080, which the
+    //      e2e webServer intentionally does NOT start. Browsers phrase the
+    //      refusal differently — Chromium: "WebSocket connection to 'ws://…/ws'
+    //      failed"; Firefox: "can't establish a connection to the server at
+    //      ws://…/ws" — so match the ws://…/ws URL itself rather than the prose.
+    //   2. "Unable to create WebGL2 context" on headless Firefox CI runners,
+    //      which have no GPU. The structural render assertions below
+    //      (pcb-canvas visible + data-status="ready" + kicanvas mounted) already
+    //      prove the board rendered; the WebGL warning is non-fatal noise here.
+    // Everything else still fails the test.
+    const isExpectedEnvError = (s: string): boolean =>
+      /ws:\/\/\S*\/ws/i.test(s) || /unable to create webgl/i.test(s);
     page.on("pageerror", (err) => {
-      if (!isExpectedWsRefusal(err.message)) consoleErrors.push(err.message);
+      if (!isExpectedEnvError(err.message)) consoleErrors.push(err.message);
     });
     page.on("console", (msg) => {
       if (msg.type() !== "error") return;
       const text = msg.text();
-      if (isExpectedWsRefusal(text)) return;
+      if (isExpectedEnvError(text)) return;
       consoleErrors.push(text);
     });
 

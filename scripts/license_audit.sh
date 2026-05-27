@@ -64,16 +64,29 @@ if command -v pnpm >/dev/null; then
     if [ "$pnpm_ok" -eq 0 ]; then
         echo "WARN: pnpm licenses ls returned no data (likely no node_modules installed). Run pnpm install first."
     else
-        bad="$(python3 - "$json" <<'PY'
+        # Pass the (potentially large) pnpm-licenses JSON via a temp file, not as
+        # an argv string — a big workspace blows past ARG_MAX (E2BIG) otherwise.
+        json_tmp="$(mktemp)"
+        printf '%s' "$json" > "$json_tmp"
+        bad="$(python3 - "$json_tmp" <<'PY'
 import json, re, sys
-data = json.loads(sys.argv[1] or "{}")
+with open(sys.argv[1], encoding="utf-8") as _f:
+    data = json.loads(_f.read() or "{}")
 allow = re.compile(r"""^(Apache-2\.0( WITH LLVM-exception)?|MIT(-0)?|BSD-[23]-Clause|ISC|MPL-2\.0|Zlib|BSL-1\.0|Unicode-3\.0|CC0-1\.0|0BSD|Python-2\.0|PSF-2\.0|HPND|CC-BY-4\.0)$""")
+# Targeted, justified exceptions to the permissive-only allowlist (SPEC NFR-009
+# amendment). occt-import-js is LGPL-2.1: it wraps OpenCASCADE (the only viable
+# in-browser STEP→mesh kernel; no production-grade permissive equivalent exists).
+# It is loaded as a *dynamically-linked* wasm module at runtime — not statically
+# linked into kiclaude's own code — so LGPL-2.1's relinking/replaceability terms
+# are satisfied without copyleft contamination of the rest of the tree.
+exceptions = {"occt-import-js"}
 bad = []
 def walk(value):
     if isinstance(value, dict):
+        name = value.get("name", "?")
         if "license" in value and isinstance(value["license"], str):
-            if not allow.match(value["license"]):
-                bad.append((value.get("name", "?"), value["license"]))
+            if name not in exceptions and not allow.match(value["license"]):
+                bad.append((name, value["license"]))
         for v in value.values():
             walk(v)
     elif isinstance(value, list):
@@ -84,6 +97,7 @@ for name, lic in bad:
     print(f"{name}: {lic}")
 PY
 )"
+        rm -f "$json_tmp"
         if [ -n "$bad" ]; then
             echo "FAIL: disallowed Node package licenses:"
             echo "$bad"
